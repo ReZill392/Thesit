@@ -169,3 +169,53 @@
   min-width: 240px; /* เพิ่มความกว้างตามต้องการ */
   flex: 1;
 }
+
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  background-color: #222;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 200px;
+  background-color: #ccc;
+  padding: 20px;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.sidebar-title {
+  margin-left: 35px;
+}
+
+.select-page {
+  width: 100%;
+  padding: 8px;
+  margin-top: 10px;
+}
+
+.fb-icon {
+  background: #1877f3;
+  border-radius: 3px;
+}
+
+/* Main content */
+.main-dashboard {
+  margin-left: 225px; /* Offset to not be under fixed sidebar */
+  flex-grow: 1;
+  padding: 20px;
+  background-color: #f0f0f0;
+  width: calc(100% - 200px); /* Ensure full width */
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}

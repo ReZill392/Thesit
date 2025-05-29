@@ -189,12 +189,12 @@ function App() {
   };
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#222" }}>
+    <div className="app-container">
       {/* Sidebar */}
-      <aside style={{ width: "200px", backgroundColor: "#ccc", padding: "20px" }}>
-        <h3 style={{ marginLeft: "35px" }}>ช่องทางเชื่อมต่อ</h3>
+      <aside className="sidebar">
+        <h3 className="sidebar-title">ช่องทางเชื่อมต่อ</h3>
         <button onClick={connectFacebook} className="BT">
-          <svg width="20" height="20" viewBox="0 0 320 512" fill="#fff" style={{ background: "#1877f3", borderRadius: "3px" }}>
+          <svg width="20" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
             <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
           </svg>
         </button>
@@ -202,21 +202,22 @@ function App() {
         <select
           value={selectedPage}
           onChange={(e) => setSelectedPage(e.target.value)}
-          style={{ width: "100%", padding: "8px", marginTop: "10px" }}
+          className="select-page"
         >
-          <option value="" style={{ textAlign: "center" }}>-- เลือกเพจ --</option>
-          {pages.map(page => (
-            <option style={{ textAlign: "center" }} key={page.id} value={page.id}>{page.name} </option>
+          <option value="">-- เลือกเพจ --</option>
+          {pages.map((page) => (
+            <option key={page.id} value={page.id}>
+              {page.name}
+            </option>
           ))}
         </select>
-
-        <a href="#" className="title" style={{ marginLeft: "50px" }}>ตั้งค่าระบบขุด</a><br />
-        <a href="#" className="title" style={{ marginLeft: "53px" }}>Dashboard</a><br />
-        <a href="#" className="title" style={{ marginLeft: "64px" }}>Setting</a><br />
+        <a href="#" className="title">ตั้งค่าระบบขุด</a><br />
+        <a href="#" className="title">Dashboard</a><br />
+        <a href="#" className="title">Setting</a><br />
       </aside>
 
       {/* Main Dashboard */}
-      <main style={{ flexGrow: 1, padding: "20px", backgroundColor: "#f0f0f0" }}>
+      <main className="main-dashboard">
         <h2>📋 ตารางการขุด</h2>
         <button
           className="filter-toggle-button"
