@@ -1,13 +1,21 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import PlainTextResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
+import models, schemas, crud
+from database import SessionLocal, engine
+from fastapi import FastAPI, Depends
+from sqlalchemy.orm import Session
+from database import SessionLocal, engine, Base
 from dotenv import load_dotenv
 import os
+from datetime import datetime
 
 app = FastAPI()
 load_dotenv()
+
+Base.metadata.create_all(bind=engine)
 
 # ================================
 # 🔧 Configuration
@@ -34,6 +42,49 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# -----------------------------------
+#            API ROUTES
+# -----------------------------------
+
+@app.post("/pages/", response_model=schemas.FacebookPageOut)
+def create_page(page: schemas.FacebookPageCreate, db: Session = Depends(get_db)):
+    db_page = crud.create_page(db, page)
+    if db_page is None:
+        raise HTTPException(status_code=400, detail="Page ID already exists")
+    return db_page
+
+@app.get("/pages/", response_model=list[schemas.FacebookPageOut])
+def read_pages(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return crud.get_pages(db, skip=skip, limit=limit)
+
+@app.get("/pages/{id}", response_model=schemas.FacebookPageOut)
+def read_page(id: int, db: Session = Depends(get_db)):
+    db_page = crud.get_page_by_id(db, id)
+    if db_page is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return db_page
+
+@app.put("/pages/{id}", response_model=schemas.FacebookPageOut)
+def update_page(id: int, page_update: schemas.FacebookPageUpdate, db: Session = Depends(get_db)):
+    db_page = crud.update_page(db, id, page_update)
+    if db_page is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return db_page
+
+@app.delete("/pages/{id}", response_model=schemas.FacebookPageOut)
+def delete_page(id: int, db: Session = Depends(get_db)):
+    db_page = crud.delete_page(db, id)
+    if db_page is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return db_page
 
 # ================================
 # 🔧 Facebook API Helpers
@@ -398,7 +449,7 @@ async def connect_facebook_page():
     return HTMLResponse(content=html_content)
 
 @app.get("/facebook/callback")
-def facebook_callback(code: str):
+def facebook_callback(code: str, db: Session = Depends(get_db)):
     """Callback จาก Facebook OAuth"""
     print(f"🔗 Facebook callback received with code: {code[:20]}...")
     
@@ -438,12 +489,20 @@ def facebook_callback(code: str):
         page_id = page["id"]
         access_token = page["access_token"]
         page_name = page.get("name", f"เพจ {page_id}")
-        
+
+        # เก็บใน dictionary memory
         page_tokens[page_id] = access_token
         page_names[page_id] = page_name
+
+        # บันทึกลงฐานข้อมูล
+        existing = crud.get_page_by_page_id(db, page_id)
+        if not existing:
+            new_page = schemas.FacebookPageCreate(page_id=page_id, page_name=page_name)
+            crud.create_page(db, new_page)
+
         connected_pages.append({"id": page_id, "name": page_name})
-        
         print(f"✅ เชื่อมต่อเพจสำเร็จ: {page_name} (ID: {page_id})")
+
 
     print(f"✅ เชื่อมต่อเพจทั้งหมด {len(connected_pages)} เพจ")
     
