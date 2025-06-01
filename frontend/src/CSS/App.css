@@ -55,7 +55,8 @@
   gap: 8px;
   cursor: pointer;
   margin-bottom: 16px;
- margin-left: 44%;
+ 
+
 }
 
 .filter-toggle-button {
@@ -202,6 +203,7 @@
 .fb-icon {
   background: #1877f3;
   border-radius: 3px;
+ 
 }
 
 /* Main content */
@@ -218,4 +220,23 @@ body {
   margin: 0;
   box-sizing: border-box;
   overflow-x: hidden;
+}
+.table {
+   border: 1px solid #ccc;
+   padding: 8px;
+}
+.mine-button {
+  background-color: #4CAF50;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 20px;
+  font-size: 16px;
+}
+
+.mine-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
 }

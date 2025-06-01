@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import './App.css';
-import { fetchPages, connectFacebook } from "./Features/Tool";
+import '../CSS/App.css';
+import { fetchPages, connectFacebook } from "../Features/Tool";
 import axios from "axios";
+import { Link } from 'react-router-dom';
 
 function App() {
   const [pages, setPages] = useState([]);
@@ -20,8 +21,10 @@ function App() {
   const displayData = filteredConversations.length > 0 ? filteredConversations : conversations;
   const [pageId, setPageId] = useState("");
   const [selectedConversationIds, setSelectedConversationIds] = useState([]);
-  const [messageToSend, setMessageToSend] = useState("📢 อยากลบ***ออกจากสมอง แต่สิ่งที่หายไปคือสมองเหลือแต่***");
-
+  
+  // 🔥 เอาบรรทัดนี้ออก เพราะจะดึงจาก localStorage แทน
+  // const [messageToSend, setMessageToSend] = useState("📢 อยากลบ***ออกจากสมอง แต่สิ่งที่หายไปคือสมองเหลือแต่***");
+  
   useEffect(() => {
     fetchPages()
       .then(setPages)
@@ -92,6 +95,15 @@ function App() {
   useEffect(() => {
     if (selectedPage) {
       fetchConversations(selectedPage);
+      // ล้าง filter ทุกตัวเมื่อเปลี่ยนเพจ
+      setDisappearTime("");
+      setCustomerType("");
+      setPlatformType("");
+      setMiningStatus("");
+      setStartDate("");
+      setEndDate("");
+      setFilteredConversations([]);
+      setSelectedConversationIds([]);
     }
   }, [selectedPage]);
 
@@ -173,19 +185,61 @@ function App() {
     );
   };
 
-  // 📤 ฟังก์ชันกดปุ่ม "ขุด"
-  const sendMessageToSelected = async () => {
-    if (!messageToSend || selectedConversationIds.length === 0) return;
+  // 🔥 ฟังก์ชันดึงข้อความจาก localStorage
+  const getDefaultMessages = () => {
+    const savedMessages = localStorage.getItem('defaultMessages');
+    return savedMessages ? JSON.parse(savedMessages) : [];
+  };
 
-    for (const conversationId of selectedConversationIds) {
-      await fetch(`/send/${pageId}/${conversationId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: messageToSend }),
-      });
+  // 📤 ฟังก์ชันกดปุ่ม "ขุด" - ส่งข้อความทั้งหมดจาก Default.js
+  const sendMessageToSelected = async () => {
+    if (selectedConversationIds.length === 0) {
+      alert("กรุณาเลือกการสนทนาที่ต้องการส่งข้อความ");
+      return;
     }
 
-    alert("ส่งข้อความเรียบร้อยแล้ว!");
+    // 🔥 ดึงข้อความทั้งหมดจาก localStorage
+    const defaultMessages = getDefaultMessages();
+    
+    if (defaultMessages.length === 0) {
+      alert("ไม่มีข้อความที่บันทึกไว้ กรุณาไปตั้งค่าข้อความใน 'ตั้งค่าระบบขุด' ก่อน");
+      return;
+    }
+
+    try {
+      // วนลูปส่งข้อความไปยังแต่ละ conversation
+      for (const conversationId of selectedConversationIds) {
+        // หา PSID จาก conversation_id
+        const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
+        const psid = selectedConv?.raw_psid;
+        
+        if (!psid) {
+          console.error(`ไม่พบ PSID สำหรับ conversation: ${conversationId}`);
+          continue;
+        }
+
+        // ส่งข้อความทีละข้อความ (ถ้าต้องการส่งทีละข้อความ)
+        for (const message of defaultMessages) {
+          await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: message }),
+          });
+          
+          // หน่วงเวลาเล็กน้อยระหว่างการส่งข้อความแต่ละข้อความ
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      alert(`ส่งข้อความเรียบร้อยแล้ว! ส่งไปยัง ${selectedConversationIds.length} การสนทนา จำนวน ${defaultMessages.length} ข้อความ`);
+      
+      // ล้างการเลือก checkbox หลังส่งเสร็จ
+      setSelectedConversationIds([]);
+      
+    } catch (error) {
+      console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
+      alert("เกิดข้อผิดพลาดในการส่งข้อความ กรุณาลองใหม่อีกครั้ง");
+    }
   };
 
   return (
@@ -194,7 +248,7 @@ function App() {
       <aside className="sidebar">
         <h3 className="sidebar-title">ช่องทางเชื่อมต่อ</h3>
         <button onClick={connectFacebook} className="BT">
-          <svg width="20" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
+          <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff"  className="fb-icon">
             <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
           </svg>
         </button>
@@ -211,9 +265,10 @@ function App() {
             </option>
           ))}
         </select>
-        <a href="#" className="title">ตั้งค่าระบบขุด</a><br />
-        <a href="#" className="title">Dashboard</a><br />
-        <a href="#" className="title">Setting</a><br />
+         <Link to="/App" className="title" style={{marginLeft:"64px"}}>หน้าแรก</Link><br />
+        <Link to="/Set_Miner" className="title" style={{marginLeft:"50px"}}>ตั้งค่าระบบขุด</Link><br />
+        <a href="#" className="title" style={{marginLeft:"53px"}}>Dashboard</a><br />
+        <a href="#" className="title" style={{marginLeft:"66px"}}>Setting</a><br />
       </aside>
 
       {/* Main Dashboard */}
@@ -307,6 +362,16 @@ function App() {
           </div>
         )}
 
+        {/* 🔥 แสดงจำนวนข้อความที่จะส่ง */}
+        <div style={{ margin: "10px 0", padding: "10px", backgroundColor: "#f0f8ff", borderRadius: "5px" }}>
+          <strong>📝 ข้อความที่จะส่ง: {getDefaultMessages().length} ข้อความ</strong>
+          {getDefaultMessages().length === 0 && (
+            <span style={{ color: "red", marginLeft: "10px" }}>
+              (กรุณาไปตั้งค่าข้อความใน 'ตั้งค่าระบบขุด' ก่อน)
+            </span>
+          )}
+        </div>
+
         {/* Table */}
         {loading ? (
           <p>⏳ กำลังโหลด...</p>
@@ -314,33 +379,33 @@ function App() {
           <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#fff" }}>
             <thead>
               <tr>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>ลำดับ</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>ชื่อผู้ใช้</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>วันที่เข้ามา</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>ระยะเวลาที่หาย</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Context</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>สินค้าที่สนใจ</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>Platform</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>หมวดหมู่ลูกค้า</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>สถานะการขุด</th>
-                <th style={{ border: "1px solid #ccc", padding: "8px" }}>เลือก</th>
+                <th class = "table">ลำดับ</th>
+                <th class = "table">ชื่อผู้ใช้</th>
+                <th class = "table">วันที่เข้ามา</th>
+                <th class = "table">ระยะเวลาที่หาย</th>
+                <th class = "table">Context</th>
+                <th class = "table">สินค้าที่สนใจ</th>
+                <th class = "table">Platform</th>
+                <th class = "table">หมวดหมู่ลูกค้า</th>
+                <th class = "table">สถานะการขุด</th>
+                <th class = "table">เลือก</th>
               </tr>
             </thead>
             <tbody>
               {displayData.map((conv, idx) => (
                 <tr key={conv.conversation_id || idx}>
                   <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "center" }}>{idx + 1}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  <td class = "table">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</td>
+                  <td class = "table">
                     {conv.created_time ? new Date(conv.created_time).toLocaleDateString("th-TH", { year: 'numeric', month: 'short', day: 'numeric' }) : "-"}
                   </td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>{timeAgo(conv.updated_time)}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>Context</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>สินค้าที่สนใจ</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>Platform</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>หมวดหมู่ลูกค้า</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>สถานะการขุด</td>
-                  <td style={{ border: "1px solid #ccc", padding: "8px" }}>
+                  <td class = "table">{timeAgo(conv.updated_time)}</td>
+                  <td class = "table">Context</td>
+                  <td class = "table">สินค้าที่สนใจ</td>
+                  <td class = "table">Platform</td>
+                  <td class = "table">หมวดหมู่ลูกค้า</td>
+                  <td class = "table">สถานะการขุด</td>
+                  <td class = "table">
                     <input
                       type="checkbox"
                       checked={selectedConversationIds.includes(conv.conversation_id)}
@@ -352,9 +417,30 @@ function App() {
             </tbody>
           </table>
         )}
-        <button onClick={sendMessageToSelected} style={{ marginTop: "10px" }}>
-          📥 ขุด
-        </button>
+        
+        {/* 🔥 ปุ่มขุดที่ปรับปรุงแล้ว */}
+        <div style={{ marginTop: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
+          <button 
+            onClick={sendMessageToSelected} 
+            style={{ 
+              backgroundColor: selectedConversationIds.length > 0 ? "#28a745" : "#6c757d",
+              color: "white",
+              padding: "10px 20px",
+              border: "none",
+              borderRadius: "5px",
+              cursor: selectedConversationIds.length > 0 ? "pointer" : "not-allowed"
+            }}
+            disabled={selectedConversationIds.length === 0}
+          >
+            📥 ขุด ({selectedConversationIds.length} รายการ)
+          </button>
+          
+          {selectedConversationIds.length > 0 && (
+            <span style={{ color: "#666" }}>
+              จะส่งข้อความ {getDefaultMessages().length} ข้อความ ไปยัง {selectedConversationIds.length} การสนทนา
+            </span>
+          )}
+        </div>
       </main>
     </div>
   );
