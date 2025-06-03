@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import '../CSS/Default.css';
-import { fetchPages, connectFacebook } from "../Features/Tool";
+import { fetchPages, connectFacebook, saveMessageToDB, getMessagesByPageId, deleteMessageFromDB } from "../Features/Tool";
 
 function SetDefault() {
   const [pages, setPages] = useState([]);
@@ -14,26 +14,49 @@ function SetDefault() {
   const [newMessage, setNewMessage] = useState("");
 
   useEffect(() => {
+    const savedPage = localStorage.getItem("selectedPage");
+    if (savedPage) {
+      setSelectedPage(savedPage);
+    }
     fetchPages()
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
-  }, []);
+    if (selectedPage) {
+      getMessagesByPageId(selectedPage)
+        .then(data => setMessages(data)) // เก็บทั้ง object: {id, message}
+        .catch(err => console.error("โหลดข้อความล้มเหลว:", err));
+    }
+  }, [selectedPage]);
 
-  // บันทึกข้อความลง localStorage ทุกครั้งที่ messages เปลี่ยนแปลง
-  useEffect(() => {
-    localStorage.setItem('defaultMessages', JSON.stringify(messages));
-  }, [messages]);
+  const handlePageChange = (e) => {
+    const pageId = e.target.value;
+    setSelectedPage(pageId);
+    localStorage.setItem("selectedPage", pageId);
+  };
 
-  const handleAddMessage = () => {
-    if (newMessage.trim()) {
-      setMessages([...messages, newMessage]);
-      setNewMessage("");
+  const handleAddMessage = async () => {
+    if (newMessage.trim() && selectedPage) {
+      try {
+        const savedMsg = await saveMessageToDB(selectedPage, newMessage); // <-- ได้ object { id, message }
+        setMessages([...messages, savedMsg]); // ✅ เพิ่มข้อความแบบมี id
+        setNewMessage("");
+      } catch (error) {
+        alert("เกิดข้อผิดพลาดในการบันทึกข้อความ");
+        console.error(error);
+      }
+    } else {
+      alert("กรุณาเลือกเพจและกรอกข้อความก่อน");
     }
   };
 
-  const handleDeleteMessage = (index) => {
-    const updatedMessages = messages.filter((_, i) => i !== index);
-    setMessages(updatedMessages);
+  const handleDeleteMessage = async (messageId) => {
+    try {
+      await deleteMessageFromDB(messageId);
+      setMessages(messages.filter(msg => msg.id !== messageId));
+    } catch (err) {
+      alert("เกิดข้อผิดพลาดในการลบข้อความ");
+      console.error(err);
+    }
   };
 
   return (
@@ -47,10 +70,7 @@ function SetDefault() {
           </svg>
         </button>
         <hr />
-        <select
-          value={selectedPage}
-          onChange={(e) => setSelectedPage(e.target.value)}
-          className="select-page"
+        <select value={selectedPage} onChange={handlePageChange} className="select-page"
         >
           <option value="">-- เลือกเพจ --</option>
           {pages.map((page) => (
@@ -59,23 +79,23 @@ function SetDefault() {
             </option>
           ))}
         </select>
-        <Link to="/App" className="title" style={{marginLeft:"64px"}}>หน้าแรก</Link><br />
-        <Link to="/Set_Miner" className="title" style={{marginLeft:"50px"}}>ตั้งค่าระบบขุด</Link><br />
-        <a href="#" className="title" style={{marginLeft:"53px"}}>Dashboard</a><br />
-        <a href="#" className="title" style={{marginLeft:"66px"}}>Setting</a><br />    
+        <Link to="/App" className="title" style={{ marginLeft: "64px" }}>หน้าแรก</Link><br />
+        <Link to="/Set_Miner" className="title" style={{ marginLeft: "50px" }}>ตั้งค่าระบบขุด</Link><br />
+        <a href="#" className="title" style={{ marginLeft: "53px" }}>Dashboard</a><br />
+        <a href="#" className="title" style={{ marginLeft: "66px" }}>Setting</a><br />
       </aside>
 
       {/* Main Content */}
       <div className="message-settings-container">
         <h1>ตั้งค่าชุดข้อความ Default</h1>
-        
+
         <div className="message-list">
           {messages.length > 0 ? (
-            messages.map((msg, index) => (
-              <div key={index} className="message-item">
-                <span>{msg}</span>
-                <button 
-                  onClick={() => handleDeleteMessage(index)}
+            messages.map((msg) => (
+              <div key={msg.id} className="message-item">
+                <span>{msg.message}</span>
+                <button
+                  onClick={() => handleDeleteMessage(msg.id)}
                   className="delete-button"
                 >
                   ลบ
@@ -94,7 +114,7 @@ function SetDefault() {
             placeholder="เพิ่มข้อความใหม่..."
             className="message-textarea"
           />
-          <button 
+          <button
             onClick={handleAddMessage}
             className="add-button"
             disabled={!newMessage.trim()}

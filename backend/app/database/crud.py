@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
-from models import FacebookPage
-from schemas import FacebookPageCreate, FacebookPageUpdate
+from app.database.models import FacebookPage
+from app.database.schemas import FacebookPageCreate, FacebookPageUpdate
 from sqlalchemy.exc import IntegrityError
-import models, schemas
+import app.database.models as models, app.database.schemas as schemas
 
 def get_page_by_id(db: Session, id: int):
     return db.query(FacebookPage).filter(FacebookPage.ID == id).first()

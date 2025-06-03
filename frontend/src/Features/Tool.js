@@ -26,3 +26,30 @@ export const sendMessage = (selectedPage, conversationId, newMessage) => {
 export const connectFacebook = () => {
   window.location.href = "http://localhost:8000/connect";
 };
+
+export async function saveMessageToDB(pageId, message) {
+  const res = await fetch("http://localhost:8000/custom_message", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ page_id: pageId, message })
+  });
+
+  if (!res.ok) throw new Error("บันทึกข้อความไม่สำเร็จ");
+  return res.json();
+}
+
+export async function getMessagesByPageId(pageId) {
+  const res = await fetch(`http://localhost:8000/custom_messages/${pageId}`);
+  if (!res.ok) throw new Error("โหลดข้อความไม่สำเร็จ");
+  return res.json();
+}
+
+export async function deleteMessageFromDB(messageId) {
+  const res = await fetch(`http://localhost:8000/custom_message/${messageId}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) throw new Error("ลบข้อความไม่สำเร็จ");
+  return res.json();
+}
