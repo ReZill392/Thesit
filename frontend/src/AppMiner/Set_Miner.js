@@ -53,14 +53,14 @@ function SetMiner() {
       {/* Main Content */}
       <div className="setminer-root">
         <div className="setminer-header">
-          ตั้งค่า ระบบขุด
+          ตั้งค่าระบบขุด
         </div>
         <div className="setminer-main">
           <div className="setminer-card">
-            <Link to="/Default" className="Box" >Default</Link>
+            <Link to="/manage-message-sets" className="Box" >Default</Link>
           </div>
           <div className="setminer-card">
-            <Link to="#" className="Box" >ตามกลุ่ม/ลูกค้า</Link>
+            <Link to="/MinerGroup" className="Box" >ตามกลุ่ม/ลูกค้า</Link>
           </div>
         </div>
       </div>

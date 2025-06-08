@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import '../CSS/App.css';
-import { fetchPages, connectFacebook } from "../Features/Tool";
-import axios from "axios";
+import { fetchPages, connectFacebook, getMessagesBySetId, fetchConversations } from "../Features/Tool";
 import { Link } from 'react-router-dom';
 
 function App() {
@@ -21,6 +20,7 @@ function App() {
   const displayData = filteredConversations.length > 0 ? filteredConversations : conversations;
   const [pageId, setPageId] = useState("");
   const [selectedConversationIds, setSelectedConversationIds] = useState([]);
+  const [defaultMessages, setDefaultMessages] = useState([]); // 🔥 เพิ่ม state สำหรับเก็บข้อความจาก DB
 
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
@@ -40,6 +40,27 @@ function App() {
     }
   }, []);
 
+  // 🔥 โหลดข้อความเมื่อเปลี่ยน selectedPage
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (selectedPage) {
+        try {
+          console.log(`🔄 กำลังโหลดข้อความสำหรับ page_id: ${selectedPage}`);
+          const data = await getMessagesBySetId(selectedPage);
+          console.log(`✅ โหลดข้อความสำเร็จ:`, data);
+          setDefaultMessages(Array.isArray(data) ? data : []);
+        } catch (err) {
+          console.error("โหลดข้อความล้มเหลว:", err);
+          setDefaultMessages([]);
+        }
+      } else {
+        setDefaultMessages([]);
+      }
+    };
+
+    loadMessages();
+  }, [selectedPage]);
+
   // ฟังก์ชันแปลงเวลาห่าง
   function timeAgo(dateString) {
     if (!dateString) return "-";
@@ -57,45 +78,33 @@ function App() {
     return `${diffDay} วันที่แล้ว`;
   }
 
-  // ฟังก์ชันโหลดข้อมูล conversations
-  const fetchConversations = (pageId) => {
+  // 🚀 ฟังก์ชันโหลดข้อมูล conversations แบบใหม่ - ใช้ batch API เพื่อความเร็ว
+  const loadConversations = async (pageId) => {
     if (!pageId) return;
 
     setLoading(true);
-    axios.get(`http://localhost:8000/psids?page_id=${pageId}`)
-      .then(res => {
-        const allConvs = res.data.conversations || [];
-        const mapped = allConvs.map((conv, idx) => {
-          const userName = conv.names && conv.names[0]
-            ? conv.names[0]
-            : (conv.participants && conv.participants[0]?.name)
-              ? conv.participants[0].name
-              : 'ไม่ทราบชื่อ';
-          return {
-            id: idx + 1,
-            updated_time: conv.updated_time,
-            created_time: conv.created_time,
-            sender_name: conv.psids[0] || "Unknown",
-            conversation_id: conv.conversation_id,
-            conversation_name: ` ${userName}`,
-            user_name: userName,
-            raw_psid: conv.psids[0]
-          };
-        });
-        setConversations(mapped);
-        setAllConversations(mapped);
-      })
-      .catch(err => {
-        alert("เกิดข้อผิดพลาด");
-        console.error(err);
-      })
-      .finally(() => setLoading(false));
+    try {
+      console.log(`🚀 เริ่มโหลด conversations สำหรับ pageId: ${pageId}`);
+      const conversations = await fetchConversations(pageId);
+      setConversations(conversations);
+      setAllConversations(conversations);
+      console.log(`✅ โหลด conversations สำเร็จ: ${conversations.length} รายการ`);
+    } catch (err) {
+      console.error("❌ เกิดข้อผิดพลาด:", err);
+      if (err.response?.status === 400) {
+        alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
+      } else {
+        alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   // โหลดข้อมูลทันทีเมื่อเลือกเพจ
   useEffect(() => {
     if (selectedPage) {
-      fetchConversations(selectedPage);
+      loadConversations(selectedPage);
       // ล้าง filter ทุกตัวเมื่อเปลี่ยนเพจ
       setDisappearTime("");
       setCustomerType("");
@@ -109,12 +118,12 @@ function App() {
   }, [selectedPage]);
 
   // ปุ่มขุด กดเพื่อโหลดข้อมูลซ้ำ
-  const handleFetchConversations = () => {
+  const handleloadConversations = () => {
     if (!selectedPage) {
       alert("กรุณาเลือกเพจ");
       return;
     }
-    fetchConversations(selectedPage);
+    loadConversations(selectedPage);
   };
 
   const handlePageChange = (e) => {
@@ -126,11 +135,15 @@ function App() {
   const applyFilters = () => {
     let filtered = [...allConversations];
 
-    // ตัวอย่าง filter: disappearTime
+    // 🔥 แก้ไข filter: disappearTime ให้ใช้ last_user_message_time แทน updated_time
     if (disappearTime) {
       const now = new Date();
       filtered = filtered.filter(conv => {
-        const updated = new Date(conv.updated_time);
+        // ใช้เวลาข้อความล่าสุดของ User หากมี ถ้าไม่มีใช้ updated_time
+        const referenceTime = conv.last_user_message_time || conv.updated_time;
+        if (!referenceTime) return false;
+
+        const updated = new Date(referenceTime);
         const diffDays = (now - updated) / (1000 * 60 * 60 * 24);
 
         switch (disappearTime) {
@@ -155,6 +168,7 @@ function App() {
         }
       });
     }
+
     // ตัวอย่าง filter: customerType (สมมติใน conv มี customerType)
     if (customerType) {
       filtered = filtered.filter(conv => conv.customerType === customerType);
@@ -192,22 +206,14 @@ function App() {
     );
   };
 
-  // 🔥 ฟังก์ชันดึงข้อความจาก localStorage
-  const getDefaultMessages = () => {
-    const savedMessages = localStorage.getItem('defaultMessages');
-    return savedMessages ? JSON.parse(savedMessages) : [];
-  };
-
-  // 📤 ฟังก์ชันกดปุ่ม "ขุด" - ส่งข้อความทั้งหมดจาก Default.js
+  // 📤 ฟังก์ชันกดปุ่ม "ขุด" - ส่งข้อความทั้งหมดจากฐานข้อมูล
   const sendMessageToSelected = async () => {
     if (selectedConversationIds.length === 0) {
       alert("กรุณาเลือกการสนทนาที่ต้องการส่งข้อความ");
       return;
     }
 
-    // 🔥 ดึงข้อความทั้งหมดจาก localStorage
-    const defaultMessages = getDefaultMessages();
-
+    // 🔥 ตรวจสอบข้อความจากฐานข้อมูล
     if (defaultMessages.length === 0) {
       alert("ไม่มีข้อความที่บันทึกไว้ กรุณาไปตั้งค่าข้อความใน 'ตั้งค่าระบบขุด' ก่อน");
       return;
@@ -225,12 +231,14 @@ function App() {
           continue;
         }
 
-        // ส่งข้อความทีละข้อความ (ถ้าต้องการส่งทีละข้อความ)
-        for (const message of defaultMessages) {
+        // ส่งข้อความทีละข้อความ
+        for (const messageObj of defaultMessages) {
+          const messageText = messageObj.message || messageObj; // รองรับทั้ง object และ string
+
           await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: message }),
+            body: JSON.stringify({ message: messageText }),
           });
 
           // หน่วงเวลาเล็กน้อยระหว่างการส่งข้อความแต่ละข้อความ
@@ -261,9 +269,9 @@ function App() {
         </button>
         <hr />
         <select
-          select value={selectedPage} onChange={handlePageChange} className="select-page"
+          value={selectedPage} onChange={handlePageChange} className="select-page"
         >
-          <option value="">-- เลือกเพจ --</option>
+
           {pages.map((page) => (
             <option key={page.id} value={page.id}>
               {page.name}
@@ -278,13 +286,19 @@ function App() {
 
       {/* Main Dashboard */}
       <main className="main-dashboard">
-        <h2>📋 ตารางการขุด</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <h2>📋 ตารางการขุด</h2>
+
+          <p>ชื่อ User</p>
+        </div>
+
         <button
           className="filter-toggle-button"
           onClick={() => setShowFilter(prev => !prev)}
         >
           🧰 ตัวกรอง
         </button>
+
         {showFilter && (
           <div className="filter-bar">
             {/* ตัวกรองตามเดิม */}
@@ -293,7 +307,7 @@ function App() {
               value={disappearTime}
               onChange={(e) => setDisappearTime(e.target.value)}
             >
-              <option value="">ระยะเวลาที่หายไป</option>
+              <option value="">ระยะเวลาที่หายไป (จากข้อความล่าสุดของ User)</option>
               <option value="1d">ภายใน 1 วัน</option>
               <option value="3d">ภายใน 3 วัน</option>
               <option value="7d">ภายใน 1 สัปดาห์</option>
@@ -369,38 +383,46 @@ function App() {
 
         {/* 🔥 แสดงจำนวนข้อความที่จะส่ง */}
         <div style={{ margin: "10px 0", padding: "10px", backgroundColor: "#f0f8ff", borderRadius: "5px" }}>
-          <strong>📝 ข้อความที่จะส่ง: {getDefaultMessages().length} ข้อความ</strong>
-          {getDefaultMessages().length === 0 && (
-            <span style={{ color: "red", marginLeft: "10px" }}>
-              (กรุณาไปตั้งค่าข้อความใน 'ตั้งค่าระบบขุด' ก่อน)
+          <strong>📝 ข้อความที่จะส่ง: {defaultMessages.length} ข้อความ</strong>
+          {displayData.length > 0 && (
+            <span style={{ marginLeft: "20px", color: "#666" }}>
+              📊 มี: {displayData.length} การสนทนา
             </span>
           )}
         </div>
 
         {/* Table */}
         {loading ? (
-          <p>⏳ กำลังโหลด...</p>
+          <div style={{ textAlign: "center", padding: "40px" }}>
+            <p style={{ fontSize: "18px" }}>⏳ กำลังโหลดข้อมูล...</p>
+          </div>
+        ) : displayData.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px" }}>
+            <p style={{ fontSize: "18px", color: "#666" }}>
+              {selectedPage ? "ไม่พบข้อมูลการสนทนา" : "กรุณาเลือกเพจเพื่อแสดงข้อมูล"}
+            </p>
+          </div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#fff" }}>
             <thead>
               <tr>
-                <th class="table">ลำดับ</th>
-                <th class="table">ชื่อผู้ใช้</th>
-                <th class="table">วันที่เข้ามา</th>
-                <th class="table">ระยะเวลาที่หาย</th>
-                <th class="table">Context</th>
-                <th class="table">สินค้าที่สนใจ</th>
-                <th class="table">Platform</th>
-                <th class="table">หมวดหมู่ลูกค้า</th>
-                <th class="table">สถานะการขุด</th>
-                <th class="table">เลือก</th>
+                <th className="table">ลำดับ</th>
+                <th className="table">ชื่อผู้ใช้</th>
+                <th className="table">วันที่เข้ามา</th>
+                <th className="table">ระยะเวลาที่หาย</th>
+                <th className="table">Context</th>
+                <th className="table">สินค้าที่สนใจ</th>
+                <th className="table">Platform</th>
+                <th className="table">หมวดหมู่ลูกค้า</th>
+                <th className="table">สถานะการขุด</th>
+                <th className="table">เลือก</th>
               </tr>
             </thead>
             <tbody>
               {displayData.map((conv, idx) => (
                 <tr key={conv.conversation_id || idx}>
                   <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "center" }}>{idx + 1}</td>
-                  <td class="table">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</td>
+                  <td className="table">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</td>
                   <td className="table">
                     {conv.updated_time
                       ? new Date(conv.updated_time).toLocaleDateString("th-TH", {
@@ -409,13 +431,19 @@ function App() {
                       : "-"
                     }
                   </td>
-                  <td class="table">{timeAgo(conv.updated_time)}</td>
-                  <td class="table">Context</td>
-                  <td class="table">สินค้าที่สนใจ</td>
-                  <td class="table">Platform</td>
-                  <td class="table">หมวดหมู่ลูกค้า</td>
-                  <td class="table">สถานะการขุด</td>
-                  <td class="table">
+                  <td className="table" >
+                    {/* 🔥 แสดงเวลาจากข้อความล่าสุดของ User */}
+                    {conv.last_user_message_time
+                      ? timeAgo(conv.last_user_message_time)
+                      : timeAgo(conv.updated_time)
+                    }
+                  </td>
+                  <td className="table">Context</td>
+                  <td className="table">สินค้าที่สนใจ</td>
+                  <td className="table">Platform</td>
+                  <td className="table">หมวดหมู่ลูกค้า</td>
+                  <td className="table">สถานะการขุด</td>
+                  <td className="table">
                     <input
                       type="checkbox"
                       checked={selectedConversationIds.includes(conv.conversation_id)}
@@ -432,22 +460,19 @@ function App() {
         <div style={{ marginTop: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
           <button
             onClick={sendMessageToSelected}
-            style={{
-              backgroundColor: selectedConversationIds.length > 0 ? "#28a745" : "#6c757d",
-              color: "white",
-              padding: "10px 20px",
-              border: "none",
-              borderRadius: "5px",
-              cursor: selectedConversationIds.length > 0 ? "pointer" : "not-allowed"
-            }}
-            disabled={selectedConversationIds.length === 0}
+            className={`button-default ${selectedConversationIds.length > 0 ? "button-active" : ""}`}
+            disabled={loading}
           >
             📥 ขุด ({selectedConversationIds.length} รายการ)
+
+          </button>
+          <button onClick={handleloadConversations} className="Re-default" disabled={loading || !selectedPage}>
+            {loading ? "⏳ กำลังโหลด..." : "🔄 รีเฟรชข้อมูล"}
           </button>
 
           {selectedConversationIds.length > 0 && (
             <span style={{ color: "#666" }}>
-              จะส่งข้อความ {getDefaultMessages().length} ข้อความ ไปยัง {selectedConversationIds.length} การสนทนา
+              จะส่งข้อความ {defaultMessages.length} ข้อความ
             </span>
           )}
         </div>

@@ -4,6 +4,8 @@ import './index.css';
 import App from './AppMiner/App';
 import SetMiner from './AppMiner/Set_Miner';
 import Default from './AppMiner/Default';
+import MinerGroup from './AppMiner/MinerGroup';
+import ManageMessageSets from './AppMiner/ManageMessageSets';
 import reportWebVitals from './reportWebVitals';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
@@ -16,6 +18,8 @@ root.render(
         <Route path="/Set_Miner" element={<SetMiner />} />
         <Route path="/App" element={<App />} />
         <Route path="/Default" element={<Default />} />
+        <Route path="/MinerGroup" element={<MinerGroup />} />
+        <Route path="/manage-message-sets" element={<ManageMessageSets />} />
         {/* Add more routes as needed */}
 
       </Routes>
