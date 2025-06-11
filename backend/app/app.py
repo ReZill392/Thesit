@@ -7,6 +7,7 @@ from app.database.database import SessionLocal, engine, Base
 from app import config
 import uvicorn
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import os
 
 # โหลด .env ไฟล์
@@ -23,6 +24,11 @@ if not vid_dir:
 
 app.mount("/images", StaticFiles(directory=image_dir), name="images")
 app.mount("/videos", StaticFiles(directory=vid_dir), name="videos")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/robots.txt")
+def robots():
+    return FileResponse("static/robots.txt", media_type="text/plain")
 
 # สร้างตารางในฐานข้อมูล
 Base.metadata.create_all(bind=engine)

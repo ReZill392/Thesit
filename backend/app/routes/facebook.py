@@ -1,4 +1,4 @@
-from app.service.facebook_api import fb_get, send_message
+from app.service.facebook_api import fb_get, send_message, send_image_binary, send_video_binary
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from datetime import datetime
 import requests
@@ -9,6 +9,7 @@ from app.database.database import get_db
 from app import config  # ✅ ใช้ config แทน app.app
 from pydantic import BaseModel
 from typing import Optional
+from app.config import image_dir,vid_dir
 
 router = APIRouter()
 
@@ -286,33 +287,38 @@ def extract_psids_with_conversation_id(conversations_data, access_token, page_id
     return result
 
 @router.post("/send/{page_id}/{psid}")
-async def send_user_message_by_psid(page_id: str, psid: str, req: SendMessageRequest):
-    """ส่งข้อความไปยังผู้ใช้ผ่าน PSID"""
+async def send_user_message_by_psid(
+    page_id: str,
+    psid: str,
+    req: SendMessageRequest,
+    request: Request
+):
     print(f"📤 กำลังส่งข้อความไปยัง PSID: {psid}")
     print(f"📤 ข้อความ: {req.message}")
-    
-    # ✅ ใช้ local dictionary แทน config
+
     access_token = page_tokens.get(page_id)
     if not access_token:
-        print(f"❌ ไม่พบ access_token สำหรับ page_id: {page_id}")
-        print(f"🔍 Available page_tokens: {list(page_tokens.keys())}")  # Debug line
         return {"error": "Page token not found. Please connect via /connect first."}
 
-    # ตรวจสอบ PSID
     if not psid or len(psid) < 10:
-        print(f"❌ PSID ไม่ถูกต้อง: {psid}")
         return {"error": "Invalid PSID"}
-    
-    # ส่งข้อความ
-    result = send_message(psid, req.message, access_token)
-    
+
+    if req.type == "image":
+        # สร้าง path ไฟล์ local เต็ม
+        image_path = f"{image_dir}/{req.message}"
+        result = send_image_binary(psid, image_path, access_token)
+
+    elif req.type == "video":
+        video_path = f"{vid_dir}/{req.message}"
+        result = send_video_binary(psid, video_path, access_token)  # ต้องเขียนฟังก์ชันนี้ด้วย
+
+    else:
+        result = send_message(psid, req.message, access_token)
+
     if "error" in result:
-        print(f"❌ เกิดข้อผิดพลาดในการส่งข้อความ: {result['error']}")
         return {"error": result["error"], "details": result}
     else:
-        print(f"✅ ส่งข้อความสำเร็จ")
         return {"success": True, "result": result}
-
 # ================================
 # 🧪 Debug Routes - เพิ่มเพื่อช่วย Debug
 # ================================
