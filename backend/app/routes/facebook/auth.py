@@ -141,9 +141,8 @@ async def get_connected_pages():
 
 
 def get_page_tokens():
-    return {
-        "577695622104397": "EAARQGRlgaz4BPN8IV8FzuumGSN1ZBs9otGDs4mkA68ttXATdyWt3ZBYOORIvo18mi43uWjwr9Gp3fFlPUKOeQZAKhqNealaDEPx6EeMIjg1IcO8TB2QFaOUTvljyEGrUKkKAnYwVnO1clFpiP7DZCZAu23dufl2gb3rffsF9vNhZCdVKwFPs7J2CJ2p7Fxwhu9s99q9leMDAZDZD"
-    }
+    """Helper function เพื่อให้ component อื่นเข้าถึง tokens"""
+    return page_tokens
 
 
 def get_page_names():
