@@ -13,8 +13,10 @@ from .messages import router as messages_router
 from .customers import router as customers_router
 from .groups import router as groups_router
 from .schedules import router as schedules_router
-from .imported_customers import router as imported_customers_router
-
+from .file_search import router as file_search_router
+from .sse import router as sse_router
+from .schedules import router as schedules_router
+from .psids_sync import router as psids_sync_router
 # สร้าง main router
 router = APIRouter()
 
@@ -25,9 +27,12 @@ router.include_router(messages_router, tags=["Facebook Messages"])
 router.include_router(customers_router, tags=["Facebook Customers"])
 router.include_router(groups_router, tags=["Facebook Groups"])
 router.include_router(schedules_router, tags=["Facebook Schedules"])
-router.include_router(imported_customers_router, tags=["Facebook ImportedCustomers"])
+router.include_router(file_search_router, tags=["File Search"])
+router.include_router(sse_router, tags=["SSE"])
+router.include_router(psids_sync_router, tags=["psids_sync"])
+router.include_router(schedules_router, tags=["Facebook Schedules"])
 
-# Debug endpoints
+# API สำหรับตรวจสอบว่า router ทำงานได้หรือไม่
 @router.get("/debug/tokens")
 async def debug_tokens():
     """ดู token ที่เก็บไว้ (สำหรับ debug)"""
@@ -42,7 +47,7 @@ async def debug_tokens():
         "page_names": page_names
     }
 
-
+# API สำหรับตรวจสอบข้อมูล conversations
 @router.get("/debug/conversations/{page_id}")
 async def debug_conversations(page_id: str):
     """Debug conversations data"""

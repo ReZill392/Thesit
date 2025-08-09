@@ -18,7 +18,8 @@ const ConversationRow = React.memo(({
   idx, 
   isSelected, 
   onToggleCheckbox,
-  onInactivityChange 
+  onInactivityChange,
+  isRecentlyUpdated
 }) => {
   const statusColors = {
     'ขุดแล้ว': '#48bb78',
@@ -26,16 +27,29 @@ const ConversationRow = React.memo(({
     'มีการตอบกลับ': '#3182ce'
   };
 
-  // Customer type mapping
-  const customerTypeMap = {
-    newCM: { name: "ลูกค้าใหม่", color: "#667eea" },
-    intrestCM: { name: "สนใจสินค้าสูง", color: "#38b2ac" },
-    dealDoneCM: { name: "ใกล้ปิดการขาย", color: "#ecc94b" },
-    exCM: { name: "ลูกค้าเก่า", color: "#718096" }
+  // อัพเดท Customer type mapping สำหรับแสดงชื่อกลุ่ม
+  const getCustomerTypeDisplay = () => {
+    // Debug log
+    console.log(`Row ${idx + 1} - Customer Type:`, {
+      name: conv.customer_type_name,
+      id: conv.customer_type_custom_id
+    });
+    
+    // ถ้ามีชื่อกลุ่มจาก backend
+    if (conv.customer_type_name) {
+      return {
+        name: conv.customer_type_name,
+        color: "#667eea"
+      };
+    }
+    
+    // ถ้าไม่มี ใช้ค่า default
+    return null;
   };
-  const customerTypeInfo = customerTypeMap[conv.customerType];
+  
+  const customerTypeInfo = getCustomerTypeDisplay();
 
-  // Platform mapping
+  // Platform mapping (โค้ดเดิม)
   const platformMap = {
     FB: {
       label: "Facebook",
@@ -61,14 +75,26 @@ const ConversationRow = React.memo(({
 
   // Mining status mapping
   const miningStatusMap = {
-    Mining: { label: "ขุดแล้ว", color: statusColors['ขุดแล้ว'] },
-    "0Mining": { label: "ยังไม่ขุด", color: statusColors['ยังไม่ขุด'] },
-    returnCM: { label: "มีการตอบกลับ", color: statusColors['มีการตอบกลับ'] }
+    'not_mined': { 
+      label: "ยังไม่ขุด", 
+      color: "#e53e3e",
+      icon: "⭕"
+    },
+    'mined': { 
+      label: "ขุดแล้ว", 
+      color: "#48bb78",
+      icon: "✅"
+    },
+    'responded': { 
+      label: "มีการตอบกลับ", 
+      color: "#3182ce",
+      icon: "💬"
+    }
   };
-  const miningStatusInfo = miningStatusMap[conv.miningStatus] || { label: "สถานะการขุด", color: "#a0aec0" };
+  const miningStatusInfo = miningStatusMap[conv.miningStatus] || miningStatusMap['not_mined'];
 
   return (
-    <tr className={`table-row ${isSelected ? 'selected' : ''}`}>
+    <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
       <td className="table-cell text-center">
         <div className="row-number">{idx + 1}</div>
       </td>
@@ -87,11 +113,15 @@ const ConversationRow = React.memo(({
       
       <td className="table-cell">
         <div className="date-display">
-          {conv.last_user_message_time
-            ? new Date(conv.last_user_message_time).toLocaleDateString("th-TH", {
-              year: 'numeric', month: 'short', day: 'numeric'
-            })
-            : "-"
+          {conv.first_interaction_at
+            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {
+                year: 'numeric', month: 'short', day: 'numeric'
+              })
+            : conv.created_time
+              ? new Date(conv.created_time).toLocaleDateString("th-TH", {
+                  year: 'numeric', month: 'short', day: 'numeric'
+                })
+              : "-"
           }
         </div>
       </td>
@@ -103,9 +133,7 @@ const ConversationRow = React.memo(({
         onInactivityChange={onInactivityChange}
       />
       
-      <td className="table-cell">
-        <span className="product-tag">{conv.product_interest || "สินค้าที่สนใจ"}</span>
-      </td>
+     
       
       <td className="table-cell">
         <div className={`platform-badge ${platformInfo.className}`}>
@@ -136,13 +164,14 @@ const ConversationRow = React.memo(({
             fontSize: "13px",
             display: "inline-block"
           }}>
-            ยังไม่จัดกลุ่ม
+          ยังไม่จัดกลุ่ม
           </span>
         )}
       </td>
       
       <td className="table-cell">
         <div className="status-indicator" style={{ '--status-color': miningStatusInfo.color }}>
+          <span className="status-icon">{miningStatusInfo.icon}</span>
           <span className="customer-type new">{miningStatusInfo.label}</span>
         </div>
       </td>

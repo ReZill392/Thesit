@@ -14,6 +14,8 @@ import GroupsGrid from './components/GroupsGrid';
 import ActionBar from './components/ActionBar';
 import EmptyState from './components/EmptyState';
 import ScheduleModal from './components/ScheduleModal';
+import GroupDetailModal from './components/GroupDetailModal';  // เพิ่ม import
+import KnowledgeSettingsModal from './components/KnowledgeSettingsModal';
 
 import '../../CSS/MinerGroup.css';
 
@@ -35,6 +37,9 @@ function MinerGroup() {
   const [selectedPage, setSelectedPage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddGroupForm, setShowAddGroupForm] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);  // เพิ่ม state สำหรับ detail modal
+  const [selectedGroupDetail, setSelectedGroupDetail] = useState(null);  // เพิ่ม state สำหรับเก็บข้อมูลกลุ่มที่เลือก
+  const [showKnowledgeSettings, setShowKnowledgeSettings] = useState(false);
 
   // Custom Hooks
   const {
@@ -237,6 +242,12 @@ function MinerGroup() {
     navigate('/GroupDefault');
   };
 
+  // เพิ่ม function สำหรับดูรายละเอียด
+  const handleViewDetails = (group) => {
+    setSelectedGroupDetail(group);
+    setShowDetailModal(true);
+  };
+
   // Effects
   useEffect(() => {
     const handlePageChange = (event) => {
@@ -265,15 +276,23 @@ function MinerGroup() {
   // Computed values
   const selectedPageInfo = selectedPage ? pages.find(p => p.id === selectedPage) : null;
   const defaultGroups = customerGroups.filter(g => g.isDefault);
-  const userGroups = customerGroups.filter(g => !g.isDefault);
+
+  // แยก knowledge groups และ user groups
+  const knowledgeGroups = customerGroups.filter(g => g.isKnowledge);
+  const userGroups = customerGroups.filter(g => !g.isKnowledge && !g.isDefault);
+
+  // กรองตามคำค้นหา
+  const filteredKnowledgeGroups = knowledgeGroups.filter(group =>
+    (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
   
   const filteredDefaultGroups = defaultGroups.filter(group =>
     (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
   
   const filteredUserGroups = userGroups.filter(group =>
-    (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+);
 
   // Render
   return (
@@ -323,15 +342,27 @@ function MinerGroup() {
             onSearchChange={setSearchTerm}
             disabled={!selectedPage}
           />
-          <button 
-            onClick={() => setShowAddGroupForm(true)}
-            className="add-group-btn"
-            disabled={!selectedPage}
-            style={{ opacity: selectedPage ? 1 : 0.5 }}
-          >
-            <span className="btn-icon">➕</span>
-            เพิ่มกลุ่มใหม่
-          </button>
+          <div className="control-buttons">
+            {selectedPage && (
+              <button 
+                onClick={() => setShowKnowledgeSettings(true)}
+                className="knowledge-settings-btn"
+                title="ตั้งค่ากลุ่มพื้นฐาน"
+              >
+                <span className="btn-icon">⚙️</span>
+                กลุ่มพื้นฐาน
+              </button>
+            )}
+            <button 
+              onClick={() => setShowAddGroupForm(true)}
+              className="add-group-btn"
+              disabled={!selectedPage}
+              style={{ opacity: selectedPage ? 1 : 0.5 }}
+            >
+              <span className="btn-icon">➕</span>
+              เพิ่มกลุ่มใหม่
+            </button>
+          </div>
         </div>
 
         <GroupFormModal 
@@ -352,7 +383,7 @@ function MinerGroup() {
           ) : (
             <>
               <GroupsGrid
-                defaultGroups={filteredDefaultGroups}
+                defaultGroups={filteredKnowledgeGroups} // ส่ง knowledge groups แทน default groups
                 userGroups={filteredUserGroups}
                 selectedGroups={selectedGroups}
                 editingGroupId={editingGroupId}
@@ -364,12 +395,21 @@ function MinerGroup() {
                 onViewSchedules={handleViewSchedules}
                 onSaveEdit={handleSaveEdit}
                 onCancelEdit={() => setEditingGroupId(null)}
+                onViewDetails={handleViewDetails}
               />
 
               <ActionBar
                 selectedCount={selectedGroups.length}
                 onProceed={handleProceed}
                 disabled={selectedGroups.length === 0}
+              />
+
+              <KnowledgeSettingsModal 
+                show={showKnowledgeSettings}
+                onClose={() => setShowKnowledgeSettings(false)}
+                pageId={selectedPage}
+                knowledgeGroups={customerGroups.filter(g => g.isKnowledge)}
+                onToggle={() => fetchCustomerGroups(selectedPage)}
               />
             </>
           )}
@@ -381,6 +421,12 @@ function MinerGroup() {
           groupName={viewingGroupName}
           onClose={() => setShowScheduleModal(false)}
           onDeleteSchedule={handleDeleteSchedule}
+        />
+
+        <GroupDetailModal 
+          show={showDetailModal}
+          group={selectedGroupDetail}
+          onClose={() => setShowDetailModal(false)}
         />
       </div>
     </div>

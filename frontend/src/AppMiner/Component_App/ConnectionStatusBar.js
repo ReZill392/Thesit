@@ -7,11 +7,13 @@
 // - แสดงเวลาอัพเดทล่าสุด
 // - มีปุ่ม Sync ข้อมูล
 // - แสดงเวลาปัจจุบัน
+// - Date Entry Filter (NEW)
 // =====================================================
 
 import React from 'react';
 import SyncCustomersButton from '../Component_App/SyncCustomersButton';
 import DateFilterBadge from '../Component_App/DateFilterBadge';
+import DateEntryFilter from '../Component_App/DateEntryFilter'; // เพิ่ม import
 
 const ConnectionStatusBar = ({ 
   selectedPage, 
@@ -20,7 +22,11 @@ const ConnectionStatusBar = ({
   currentTime,
   onSyncComplete,
   syncDateRange,
-  onClearDateFilter
+  onClearDateFilter,
+  // เพิ่ม props สำหรับ DateEntryFilter
+  conversations,
+  onDateEntryFilterChange,
+  currentDateEntryFilter
 }) => {
   const getUpdateStatus = () => {
     const diffMs = currentTime - lastUpdateTime;
@@ -42,23 +48,23 @@ const ConnectionStatusBar = ({
             {selectedPage ? `เชื่อมต่อแล้ว: ${selectedPageInfo?.name}` : 'ยังไม่ได้เชื่อมต่อ'}
           </span>
         </div>
-        
-        <div className={`update-badge ${updateStatus.color}`}>
-          <span className="update-icon">🔄</span>
-          <span className="update-text">{updateStatus.status}</span>
-        </div>
-        
+       
         {selectedPage && (
           <SyncCustomersButton 
             selectedPage={selectedPage}
             onSyncComplete={onSyncComplete}
           />
         )}
-
-        <DateFilterBadge 
-          dateRange={syncDateRange}
-          onClear={onClearDateFilter}
-        />
+        
+        
+        {/* Date Entry Filter - เพิ่มตรงนี้ */}
+        {selectedPage && conversations && (
+          <DateEntryFilter
+            conversations={conversations}
+            onFilterChange={onDateEntryFilterChange}
+            currentFilter={currentDateEntryFilter}
+          />
+        )}
       </div>
       
       <div className="status-right">

@@ -3,12 +3,14 @@
 // =====================================================
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useRealtimeUpdates } from './Component_App/useRealtimeUpdates'; // 🆕 เพิ่ม import
 import '../CSS/App.css';
 import { fetchPages, getMessagesBySetId, fetchConversations } from "../Features/Tool";
 import Sidebar from "./Sidebar"; 
 import Popup from "./Component_App/MinerPopup";
 import SyncCustomersButton from './Component_App/SyncCustomersButton';
 import DateFilterBadge from './Component_App/DateFilterBadge';
+import DateEntryFilter from './Component_App/DateEntryFilter';
 
 // Import component ย่อยที่แยกออกมา
 import TimeAgoCell from './Component_App/TimeAgoCell';
@@ -58,7 +60,13 @@ function App() {
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
   const [syncDateRange, setSyncDateRange] = useState(null);
   const [userInactivityData, setUserInactivityData] = useState({});
+  const [pendingUpdates, setPendingUpdates] = useState([]);
+  const [lastUpdateId, setLastUpdateId] = useState(null);
+  const [recentlyUpdatedUsers, setRecentlyUpdatedUsers] = useState(new Set());
   
+  // เพิ่ม state สำหรับ date filter (ใน function App())
+  const [dateEntryFilter, setDateEntryFilter] = useState(null);
+
   // Daily Mining Limit States
   const [dailyMiningLimit, setDailyMiningLimit] = useState(() => {
     const saved = localStorage.getItem('dailyMiningLimit');
@@ -181,54 +189,238 @@ function App() {
     }
   };
 
-  const loadConversations = async (pageId) => {
-    if (!pageId) return;
+  const loadConversations = async (pageId, forceRefresh = false) => {
+  if (!pageId) return;
 
-    setLoading(true);
-    try {
-      const conversations = await fetchConversations(pageId);
-      console.log('📊 โหลดข้อมูลจาก database สำเร็จ');
-      
-      setConversations(conversations);
-      setAllConversations(conversations);
-      setLastUpdateTime(new Date());
-      
-      // Reset filters
-      setFilters({
-        disappearTime: "",
-        startDate: "",
-        endDate: "",
-        customerType: "",
-        platformType: "",
-        miningStatus: ""
-      });
-      setFilteredConversations([]);
-      setSelectedConversationIds([]);
-    } catch (err) {
-      console.error("❌ เกิดข้อผิดพลาด:", err);
-      if (err.response?.status === 400) {
-        alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
-      } else {
-        alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleloadConversations = () => {
-    if (!selectedPage) {
-      alert("กรุณาเลือกเพจ");
+  // ถ้าไม่ใช่ force refresh และมี cache อยู่ ให้ใช้ cache
+  if (!forceRefresh) {
+    const cached = getCachedData(`conversations_${pageId}`, { current: {} });
+    if (cached) {
+      setConversations(cached);
+      setAllConversations(cached);
       return;
     }
-    messageCache.current = {};
-    loadConversations(selectedPage);
-  };
+  }
+
+  setLoading(true);
+  try {
+    const conversations = await fetchConversations(pageId);
+    console.log('📊 โหลดข้อมูลจาก database สำเร็จ');
+    console.log('📋 ข้อมูลที่ได้รับ (กรองแล้ว):', conversations);
+    
+    setConversations(conversations);
+    setAllConversations(conversations);
+    setLastUpdateTime(new Date());
+    
+    // Reset filters
+    setFilters({
+      disappearTime: "",
+      startDate: "",
+      endDate: "",
+      customerType: "",
+      platformType: "",
+      miningStatus: ""
+    });
+    setFilteredConversations([]);
+    setSelectedConversationIds([]);
+    
+    // Update cache
+    setCachedData(`conversations_${pageId}`, conversations, { current: {} });
+  } catch (err) {
+    console.error("❌ เกิดข้อผิดพลาด:", err);
+    if (err.response?.status === 400) {
+      alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
+    } else {
+      alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // 🆕 Callback สำหรับ real-time updates
+  const handleRealtimeUpdate = useCallback((updates) => {
+    console.log('📊 Received updates:', updates);
+
+    // Handle customer type updates
+    if (Array.isArray(updates) && updates.length > 0) {
+      const firstUpdate = updates[0];
+
+      // ตรวจสอบว่าเป็น customer type update
+      if (firstUpdate.customer_type_name !== undefined || firstUpdate.customer_type_custom_id !== undefined) {
+        console.log('🏷️ Processing customer type updates');
+
+        // อัพเดท conversations
+        setConversations(prevConvs => {
+          return prevConvs.map(conv => {
+            const update = updates.find(u => u.psid === conv.raw_psid);
+            if (update) {
+              // เพิ่ม user ที่อัพเดทเข้า Set
+              if (update.customer_type_name !== undefined) {
+                setRecentlyUpdatedUsers(prev => {
+                  const newSet = new Set(prev);
+                  newSet.add(conv.raw_psid);
+
+                  setTimeout(() => {
+                    setRecentlyUpdatedUsers(current => {
+                      const updated = new Set(current);
+                      updated.delete(conv.raw_psid);
+                      return updated;
+                    });
+                  }, 3000);
+
+                  return newSet;
+                });
+              }
+
+              // 🟢 เพิ่มการอัพเดทเวลา
+              return {
+                ...conv,
+                customer_type_custom_id: update.customer_type_custom_id,
+                customer_type_name: update.customer_type_name,
+                last_user_message_time: update.last_interaction || conv.last_user_message_time,
+                updated_time: new Date().toISOString()
+              };
+            }
+            return conv;
+          });
+        });
+
+        // อัพเดท allConversations
+        setAllConversations(prevAll => {
+          return prevAll.map(conv => {
+            const update = updates.find(u => u.psid === conv.raw_psid);
+            if (update) {
+              return {
+                ...conv,
+                customer_type_custom_id: update.customer_type_custom_id,
+                customer_type_name: update.customer_type_name,
+                last_user_message_time: update.last_interaction || conv.last_user_message_time,
+                updated_time: new Date().toISOString()
+              };
+            }
+            return conv;
+          });
+        });
+
+        // อัพเดท filteredConversations ถ้ามี
+        setFilteredConversations(prevFiltered => {
+          if (prevFiltered.length > 0) {
+            return prevFiltered.map(conv => {
+              const update = updates.find(u => u.psid === conv.raw_psid);
+              if (update) {
+                return {
+                  ...conv,
+                  customer_type_custom_id: update.customer_type_custom_id,
+                  customer_type_name: update.customer_type_name,
+                  last_user_message_time: update.last_interaction || conv.last_user_message_time,
+                  updated_time: new Date().toISOString()
+                };
+              }
+              return conv;
+            });
+          }
+          return prevFiltered;
+        });
+
+        // แสดง notification
+        const updateCount = updates.filter(u => u.customer_type_name).length;
+        if (updateCount > 0) {
+          showNotification('info', `อัพเดทหมวดหมู่ลูกค้า ${updateCount} คน`);
+        }
+
+        return; // จบการประมวลผล customer type updates
+      }
+    }
+
+    // Handle normal customer updates (โค้ดเดิม)
+    setPendingUpdates(prev => [...prev, ...updates]);
+
+    setConversations(prevConvs => {
+      const conversationMap = new Map(prevConvs.map(c => [c.raw_psid, c]));
+      updates.forEach(update => {
+        const existing = conversationMap.get(update.psid);
+        if (existing) {
+          conversationMap.set(update.psid, {
+            ...existing,
+            user_name: update.name,
+            conversation_name: update.name,
+            last_user_message_time: update.last_interaction,
+            first_interaction_at: update.first_interaction,
+            source_type: update.source_type,
+            updated_time: new Date().toISOString()
+          });
+        } else {
+          const newConv = {
+            id: conversationMap.size + 1,
+            conversation_id: update.psid,
+            raw_psid: update.psid,
+            user_name: update.name,
+            conversation_name: update.name,
+            last_user_message_time: update.last_interaction,
+            first_interaction_at: update.first_interaction,
+            source_type: update.source_type,
+            created_time: update.first_interaction,
+            updated_time: new Date().toISOString()
+          };
+          conversationMap.set(update.psid, newConv);
+        }
+      });
+    const updatedConvs = Array.from(conversationMap.values()).sort((a, b) => {
+      const timeA = new Date(a.last_user_message_time || 0);
+      const timeB = new Date(b.last_user_message_time || 0);
+      return timeB - timeA;
+    });
+    return updatedConvs;
+  });
+
+  setAllConversations(prevAll => {
+    const allMap = new Map(prevAll.map(c => [c.raw_psid, c]));
+    updates.forEach(update => {
+      const existing = allMap.get(update.psid);
+      if (existing) {
+        allMap.set(update.psid, {
+          ...existing,
+          user_name: update.name,
+          conversation_name: update.name,
+          last_user_message_time: update.last_interaction,
+          first_interaction_at: update.first_interaction,
+          source_type: update.source_type
+        });
+      }
+    });
+    return Array.from(allMap.values());
+  });
+
+  setLastUpdateId(prev => prev + 1);
+  setLastUpdateTime(new Date());
+
+  const newCustomers = updates.filter(u => u.action === 'new');
+  if (newCustomers.length > 0) {
+    showNotification('info', `มีลูกค้าใหม่ ${newCustomers.length} คน`);
+  }
+}, []);
+
+  // 🆕 ใช้ real-time updates
+  const { disconnect, reconnect } = useRealtimeUpdates(
+    selectedPage,
+    handleRealtimeUpdate
+  );
 
   // Filter Functions
   const applyFilters = () => {
     let filtered = [...allConversations];
     const { disappearTime, customerType, platformType, miningStatus, startDate, endDate } = filters;
+
+    if (dateEntryFilter) {
+    filtered = filtered.filter(conv => {
+      const dateStr = conv.first_interaction_at || conv.created_time;
+      if (!dateStr) return false;
+      
+      const date = new Date(dateStr).toISOString().split('T')[0];
+      return date === dateEntryFilter;
+    });
+  }
 
     if (disappearTime) {
       const now = new Date();
@@ -282,6 +474,25 @@ function App() {
     setSyncDateRange(null);
     loadConversations(selectedPage);
   };
+
+  // เพิ่ม useEffect เพื่อ apply filters เมื่อ dateEntryFilter เปลี่ยน
+  useEffect(() => {
+    if (dateEntryFilter !== null) {
+      applyFilters();
+    } else {
+      setFilteredConversations([]);
+    }
+  }, [dateEntryFilter]);
+
+
+// Handler สำหรับ date entry filter
+const handleDateEntryFilterChange = (date) => {
+  setDateEntryFilter(date);
+  
+  if (date === null) {
+    setFilteredConversations([]);
+  }
+};
 
   // Message Sending Functions
   const sendMessagesBySelectedSets = async (messageSetIds) => {
@@ -472,17 +683,17 @@ function App() {
     const past = new Date(referenceTime);
     const now = new Date();
     const diffMs = now.getTime() - past.getTime();
-    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffMinutes = Math.floor(diffMs / 60000); //  แปลงเป็นนาที
     
     return diffMinutes > 0 ? diffMinutes : 0;
   };
 
-  // Effects
+  // ตัวรีเซ็ตคือ resetDailyCount
   useEffect(() => {
     // Reset daily count at midnight
     const checkMidnight = setInterval(() => {
       resetDailyCount();
-    }, 60000); // Check every minute
+    }, 5000); // Check every second
 
     return () => clearInterval(checkMidnight);
   }, []);
@@ -535,7 +746,8 @@ function App() {
       setConversations([]);
     }
   }, [selectedPage]);
-
+  
+  // 🆕 ใช้ useRealtimeUpdates hook
   useEffect(() => {
     clockIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date());
@@ -546,16 +758,8 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (selectedPage) {
-      const interval = setInterval(() => {
-        loadConversations(selectedPage);
-      }, 15000);
-
-      return () => clearInterval(interval);
-    }
-  }, [selectedPage]);
-
+ 
+  
   useEffect(() => {
     if (inactivityUpdateTimerRef.current) {
       clearInterval(inactivityUpdateTimerRef.current);
@@ -574,7 +778,99 @@ function App() {
     };
   }, [sendInactivityBatch]);
 
-  // Render
+  // 🆕 ฟังก์ชันสำหรับเพิ่ม users จาก file search
+  const handleAddUsersFromFile = useCallback((usersFromDatabase) => {
+    setConversations(prevConvs => {
+      // กรองเอาเฉพาะ users ที่ยังไม่มีในตาราง
+      const existingIds = new Set(prevConvs.map(c => c.conversation_id));
+      const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
+      
+      // รวม users ใหม่เข้ากับที่มีอยู่
+      const combined = [...prevConvs, ...newUsers];
+      
+      // เรียงลำดับตาม last_user_message_time
+      combined.sort((a, b) => {
+        const timeA = new Date(a.last_user_message_time || 0);
+        const timeB = new Date(b.last_user_message_time || 0);
+        return timeB - timeA;
+      });
+      
+      return combined;
+    });
+    
+    // อัพเดท allConversations ด้วย
+    setAllConversations(prevConvs => {
+      const existingIds = new Set(prevConvs.map(c => c.conversation_id));
+      const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
+      return [...prevConvs, ...newUsers];
+    });
+    
+    // อัพเดท filteredConversations ถ้ามีการกรองอยู่
+    setFilteredConversations(prevFiltered => {
+      if (prevFiltered.length > 0) {
+        const existingIds = new Set(prevFiltered.map(c => c.conversation_id));
+        const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
+        return [...prevFiltered, ...newUsers];
+      }
+      return prevFiltered;
+    });
+  }, []);
+
+  // 🆕 Visual indicator สำหรับ update
+  const UpdateIndicator = () => {
+    const [showPulse, setShowPulse] = useState(false);
+
+    useEffect(() => {
+      if (lastUpdateId > 0) {
+        setShowPulse(true);
+        const timer = setTimeout(() => setShowPulse(false), 1000);
+        return () => clearTimeout(timer);
+      }
+    }, [lastUpdateId]);
+
+    if (!showPulse) return null;
+
+    return (
+      <div className="update-indicator">
+       
+      </div>
+    );
+  };
+
+  // ในไฟล์ App.js - แก้ไขฟังก์ชัน handleloadConversations
+// ค้นหาบรรทัดนี้และแทนที่ด้วย code ด้านล่าง:
+
+  // ฟังก์ชันโหลดข้อมูลแชท
+  const handleloadConversations = async () => {
+  console.log("🔄 เริ่มรีเฟรชข้อมูล...");
+  
+  if (!selectedPage) {
+    showNotification('warning', 'กรุณาเลือกเพจก่อนรีเฟรช');
+    return;
+  }
+  
+  // Disconnect SSE temporarily
+  if (disconnect) {
+    disconnect();
+  }
+  
+  try {
+    // Force refresh with true parameter
+    await loadConversations(selectedPage, true);
+    
+    // Reconnect SSE
+    if (reconnect) {
+      setTimeout(() => reconnect(), 1000);
+    }
+    
+    showNotification('success', 'รีเฟรชข้อมูลสำเร็จ', `โหลดข้อมูล ${conversations.length} รายการ`);
+  } catch (error) {
+    console.error("Error refreshing data:", error);
+    showNotification('error', 'รีเฟรชข้อมูลไม่สำเร็จ', error.message);
+  }
+};
+
+
   return (
     <div className="app-container">
       <Sidebar />
@@ -595,37 +891,46 @@ function App() {
           }}
           syncDateRange={syncDateRange}
           onClearDateFilter={handleClearDateFilter}
+          // เพิ่ม props สำหรับ DateEntryFilter
+          conversations={allConversations}
+          onDateEntryFilterChange={handleDateEntryFilterChange}
+          currentDateEntryFilter={dateEntryFilter}
         />
         
         <FileUploadSection 
-          displayData={displayData}
-          onSelectUsers={(conversationIds) => {
-            setSelectedConversationIds(prev => {
-              const newIds = [...new Set([...prev, ...conversationIds])];
-              return newIds;
-            });
-          }}
-          onClearSelection={() => setSelectedConversationIds([])} 
-        />
+        displayData={displayData}
+        selectedPage={selectedPage}
+        onSelectUsers={(conversationIds) => {
+          setSelectedConversationIds(prev => {
+            const newIds = [...new Set([...prev, ...conversationIds])];
+            return newIds;
+          });
+        }}
+        onClearSelection={() => setSelectedConversationIds([])}
+        onAddUsersFromFile={handleAddUsersFromFile} // 🆕 เพิ่ม prop นี้
+      />
         
-        <FilterSection
-          showFilter={showFilter}
-          onToggleFilter={() => setShowFilter(prev => !prev)}
-          filters={filters}
-          onFilterChange={(newFilters) => setFilters(newFilters)}
-          onApplyFilters={applyFilters}
-          onClearFilters={() => {
-            setFilteredConversations([]);
-            setFilters({
-              disappearTime: "",
-              startDate: "",
-              endDate: "",
-              customerType: "",
-              platformType: "",
-              miningStatus: ""
-            });
-          }}
-        />
+      {/* Filter Section ที่มีอยู่เดิม */}
+      <FilterSection
+        showFilter={showFilter}
+        onToggleFilter={() => setShowFilter(prev => !prev)}
+        filters={filters}
+        onFilterChange={(newFilters) => setFilters(newFilters)}
+        onApplyFilters={applyFilters}
+        onClearFilters={() => {
+          setFilteredConversations([]);
+          setFilters({
+            disappearTime: "",
+            startDate: "",
+            endDate: "",
+            customerType: "",
+            platformType: "",
+            miningStatus: ""
+          });
+          setDateEntryFilter(null); // Clear date entry filter too
+        }}
+      />
+     
         
         <AlertMessages
           selectedPage={selectedPage}
@@ -653,6 +958,18 @@ function App() {
                 }
               }}
               onInactivityChange={handleInactivityChange}
+              // ส่ง prop isRecentlyUpdated ไปยัง ConversationRow ผ่าน ConversationTable
+              renderRow={(conv, idx, isSelected, onToggleCheckbox, onInactivityChange) => (
+                <ConversationRow
+                  key={conv.conversation_id}
+                  conv={conv}
+                  idx={idx}
+                  isSelected={isSelected}
+                  onToggleCheckbox={onToggleCheckbox}
+                  onInactivityChange={onInactivityChange}
+                  isRecentlyUpdated={recentlyUpdatedUsers.has(conv.raw_psid)}
+                />
+              )}
             />
           )}
         </div>
@@ -663,7 +980,7 @@ function App() {
           loading={loading}
           selectedPage={selectedPage}
           onOpenPopup={handleOpenPopup}
-          onRefresh={handleloadConversations}
+          onRefresh={handleloadConversations}  // <-- ตรวจสอบบรรทัดนี้
           canMineMore={canMineMore()}
           remainingMines={getRemainingMines()}
         />
@@ -684,6 +1001,8 @@ function App() {
             }}
           />
         )}
+
+      
       </main>
     </div>
   );

@@ -5,7 +5,7 @@ import GroupCard from './GroupCard';
 /**
  * GroupsGrid Component
  * จัดการการแสดงผลกลุ่มลูกค้าทั้งหมด
- * - แบ่งเป็น default groups และ user groups
+ * - แบ่งเป็น knowledge groups และ user groups
  * - จัดการ grid layout
  */
 const GroupsGrid = ({
@@ -20,28 +20,33 @@ const GroupsGrid = ({
   onEditMessages,
   onViewSchedules,
   onSaveEdit,
-  onCancelEdit
+  onCancelEdit,
+  onViewDetails
 }) => {
-  if (defaultGroups.length === 0 && userGroups.length === 0) {
+  // แยก knowledge groups และ user groups
+  const knowledgeGroups = [...defaultGroups, ...userGroups].filter(g => g.isKnowledge);
+  const customGroups = userGroups.filter(g => !g.isKnowledge);
+
+  if (knowledgeGroups.length === 0 && customGroups.length === 0) {
     return (
       <div className="empty-state">
         <div className="empty-icon">🔍</div>
         <h3>ไม่พบกลุ่มที่ค้นหา</h3>
-        <p>ลองค้นหาด้วยคำอื่น</p>
+       
       </div>
     );
   }
 
   return (
     <>
-      {defaultGroups.length > 0 && (
-        <div className="default-groups-section">
+      {knowledgeGroups.length > 0 && (
+        <div className="knowledge-groups-section">
           <h3 className="section-title">
-            <span className="section-icon">⭐</span>
+            <span className="section-icon">🧠</span>
             กลุ่มพื้นฐาน
           </h3>
-          <div className="groups-grid">
-            {defaultGroups.map((group) => (
+          <div className="groups-grid_D">
+            {knowledgeGroups.map((group) => (
               <GroupCard
                 key={group.id}
                 group={group}
@@ -55,13 +60,14 @@ const GroupsGrid = ({
                 onViewSchedules={onViewSchedules}
                 onSaveEdit={onSaveEdit}
                 onCancelEdit={onCancelEdit}
+                onViewDetails={onViewDetails}
               />
             ))}
           </div>
         </div>
       )}
 
-      {defaultGroups.length > 0 && userGroups.length > 0 && (
+      {knowledgeGroups.length > 0 && customGroups.length > 0 && (
         <div className="groups-divider">
           <div className="divider-line"></div>
           <span className="divider-text">กลุ่มที่คุณสร้าง</span>
@@ -69,10 +75,10 @@ const GroupsGrid = ({
         </div>
       )}
 
-      {userGroups.length > 0 && (
+      {customGroups.length > 0 && (
         <div className="user-groups-section">
           <div className="groups-grid">
-            {userGroups.map((group) => (
+            {customGroups.map((group) => (
               <GroupCard
                 key={group.id}
                 group={group}
@@ -86,6 +92,7 @@ const GroupsGrid = ({
                 onViewSchedules={onViewSchedules}
                 onSaveEdit={onSaveEdit}
                 onCancelEdit={onCancelEdit}
+                onViewDetails={onViewDetails}
               />
             ))}
           </div>

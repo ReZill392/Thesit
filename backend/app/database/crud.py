@@ -10,11 +10,11 @@ from sqlalchemy import or_, func
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 import logging
+from sqlalchemy.orm import joinedload
 
 logger = logging.getLogger(__name__)
 
 # ฟังก์ชันเดิมทั้งหมด...
-
 def get_page_by_id(db: Session, id: int):
     return db.query(FacebookPage).filter(FacebookPage.ID == id).first()
 
@@ -451,3 +451,20 @@ def get_customer_type_statistics(db: Session, page_id: int):
     })
     
     return statistics
+
+def get_customers_updated_after(db: Session, page_id: int, after_time: datetime):
+    """Get customers updated after specific time"""
+    try:
+        # ใช้ joinedload เพื่อหลีกเลี่ยง lazy loading
+        customers = db.query(models.FbCustomer).options(
+            joinedload(models.FbCustomer.customer_type_custom)
+        ).filter(
+            models.FbCustomer.page_id == page_id,
+            models.FbCustomer.updated_at > after_time
+        ).all()
+        
+        return customers
+    except Exception as e:
+        logger.error(f"Error in get_customers_updated_after: {e}")
+        db.rollback()
+        return []

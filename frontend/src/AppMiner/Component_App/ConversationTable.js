@@ -25,9 +25,8 @@ const ConversationTable = ({
           <tr>
             <th className="th-number">ลำดับ</th>
             <th className="th-user">ผู้ใช้</th>
-            <th className="th-date" style={{paddingLeft:"20px"}}>วันที่เข้ามา</th>
-            <th className="th-time">ระยะเวลาที่หาย</th>
-            <th className="th-product">สินค้าที่สนใจ</th>
+            <th className="th-date" style={{paddingLeft:"20px"}}>วันที่เข้า</th>
+            <th className="th-time">ระยะเวลาที่หาย</th>    
             <th className="th-platform">Platform</th>
             <th className="th-type">หมวดหมู่ลูกค้า</th>
             <th className="th-status">สถานะการขุด</th>

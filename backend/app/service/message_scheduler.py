@@ -7,9 +7,13 @@ from app.database import crud
 from sqlalchemy.orm import Session
 from app.database.database import SessionLocal
 import json
+from app.routes.facebook.sse import send_customer_type_update
+from app.database import models
 
 logger = logging.getLogger(__name__)
 
+# Message Scheduler Class
+# จัดการการส่งข้อความตามกำหนดเวลาและเงื่อนไขต่าง
 class MessageScheduler:
     def __init__(self):
         self.active_schedules: Dict[str, List[Dict[str, Any]]] = {}
@@ -20,12 +24,14 @@ class MessageScheduler:
         self.last_check_time: Dict[int, datetime] = {}  # {schedule_id: last_check_datetime}
         # เพิ่มตัวเก็บข้อมูลระยะเวลาที่หายไปของ users
         self.user_inactivity_data: Dict[str, Dict[str, Any]] = {}  # {page_id: {user_id: {last_message_time, inactivity_minutes}}}
-        
+    
+    # API สำหรับอัพเดท page tokens    
     def set_page_tokens(self, tokens: Dict[str, str]):
         """อัพเดท page tokens"""
         self.page_tokens = tokens
         logger.info(f"Updated page tokens for {len(tokens)} pages")
-        
+    
+    # API สำหรับอัพเดทข้อมูลระยะเวลาที่หายไปของ users    
     def update_user_inactivity_data(self, page_id: str, user_data: List[Dict[str, Any]]):
         """อัพเดทข้อมูลระยะเวลาที่หายไปของ users จาก frontend"""
         if page_id not in self.user_inactivity_data:
@@ -44,7 +50,8 @@ class MessageScheduler:
                 }
         
         logger.info(f"Updated inactivity data for {len(user_data)} users on page {page_id}")
-        
+    
+    # API สำหรับเพิ่ม schedule ใหม่    
     def add_schedule(self, page_id: str, schedule: Dict[str, Any]):
         """เพิ่ม schedule เข้าระบบ"""
         if page_id not in self.active_schedules:
@@ -63,7 +70,8 @@ class MessageScheduler:
             self.sent_tracking[str(schedule['id'])] = set()
             
         logger.info(f"Added schedule {schedule['id']} for page {page_id}")
-        
+    
+    # API สำหรับลบ schedule    
     def remove_schedule(self, page_id: str, schedule_id: int):
         """ลบ schedule ออกจากระบบ"""
         if page_id in self.active_schedules:
@@ -74,7 +82,8 @@ class MessageScheduler:
             self.sent_tracking.pop(str(schedule_id), None)
             self.last_check_time.pop(schedule_id, None)
             logger.info(f"Removed schedule {schedule_id} for page {page_id}")
-            
+    
+    # API สำหรับเริ่มระบบตรวจสอบ schedule        
     async def start_schedule_monitoring(self):
         """เริ่มระบบตรวจสอบ schedule"""
         self.is_running = True
@@ -88,7 +97,8 @@ class MessageScheduler:
             except Exception as e:
                 logger.error(f"Error in schedule monitoring: {e}")
                 await asyncio.sleep(30)
-                
+     
+     # API สำหรับตรวจสอบ schedule ทั้งหมด           
     async def check_all_schedules(self):
         """ตรวจสอบ schedule ทั้งหมด"""
         current_time = datetime.now()
@@ -100,7 +110,8 @@ class MessageScheduler:
                     await self.check_schedule(page_id, schedule, current_time)
                 except Exception as e:
                     logger.error(f"Error checking schedule {schedule['id']}: {e}")
-                    
+    
+    # API สำหรับตรวจสอบแต่ละ schedule                
     async def check_schedule(self, page_id: str, schedule: Dict[str, Any], current_time: datetime):
         """ตรวจสอบแต่ละ schedule"""
         schedule_type = schedule.get('type')
@@ -123,7 +134,8 @@ class MessageScheduler:
 
             self.last_check_time[schedule['id']] = current_time
             await self.check_user_inactivity_v2(page_id, schedule)
-            
+    
+    # API สำหรับตรวจสอบเวลาที่กำหนดใน schedule        
     async def check_scheduled_time(self, page_id: str, schedule: Dict[str, Any], current_time: datetime):
         """ตรวจสอบการส่งตามเวลาที่กำหนด"""
         schedule_date = schedule.get('date')
@@ -159,7 +171,8 @@ class MessageScheduler:
             
             # ตรวจสอบการทำซ้ำ
             await self.handle_repeat(page_id, schedule, current_time)
-            
+    
+    # API สำหรับตรวจสอบ user inactivity โดยใช้ข้อมูลจาก frontend        
     async def check_user_inactivity_v2(self, page_id: str, schedule: Dict[str, Any]):
         """ตรวจสอบ user ที่หายไปโดยใช้ข้อมูลจาก frontend"""
         try:
@@ -226,7 +239,7 @@ class MessageScheduler:
             # ส่งข้อความให้ users ที่ตรงเงื่อนไข
             if inactive_users:
                 logger.info(f"Found {len(inactive_users)} users matching inactivity condition for schedule {schedule['id']}")
-                await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token)
+                await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token, schedule)
 
                 # เพิ่ม users ที่ส่งแล้วเข้า tracking
                 self.sent_tracking[schedule_id].update(inactive_users)
@@ -247,7 +260,8 @@ class MessageScheduler:
 
         except Exception as e:
             logger.error(f"Error checking user inactivity v2: {e}")
-
+            
+    # API สำหรับอัพเดทข้อมูล inactivity จาก conversations โดยตรง
     async def update_inactivity_from_conversations(self, page_id: str):
         """อัพเดทข้อมูล inactivity จาก conversations โดยตรง"""
         try:
@@ -297,6 +311,7 @@ class MessageScheduler:
         except Exception as e:
             logger.error(f"Error updating inactivity from conversations: {e}")
 
+    # API สำหรับประมวลผลและส่งข้อความตาม schedule
     async def process_schedule(self, page_id: str, schedule: Dict[str, Any]):
         """ประมวลผลและส่งข้อความตาม schedule"""
         try:
@@ -343,67 +358,105 @@ class MessageScheduler:
                         
             if all_psids:
                 logger.info(f"Sending messages to {len(all_psids)} users")
-                # ส่งข้อความ
-                await self.send_messages_to_users(page_id, all_psids, messages, access_token)
-                
-                # เพิ่ม users ที่ส่งแล้วเข้า tracking
+                # ส่งข้อความพร้อม schedule data
+                await self.send_messages_to_users(page_id, all_psids, messages, access_token, schedule)
+            
+            # เพิ่ม users ที่ส่งแล้วเข้า tracking
                 self.sent_tracking[schedule_id].update(all_psids)
             else:
                 logger.warning("No users found to send messages")
-                
+            
         except Exception as e:
             logger.error(f"Error processing schedule: {e}")
-            
-    async def send_messages_to_users(self, page_id: str, psids: List[str], messages: List[Dict], access_token: str):
-        """ส่งข้อความไปยัง users"""
+    
+    # API สำหรับส่งข้อความไปยัง users        
+    async def send_messages_to_users(self, page_id: str, psids: List[str], messages: List[Dict], access_token: str, schedule: Dict[str, Any] = None):
+        """ส่งข้อความไปยัง users พร้อมอัพเดท customer type"""
         success_count = 0
         fail_count = 0
         
         logger.info(f"Starting to send messages to {len(psids)} users")
         
-        for psid in psids:
-            try:
-                # ส่งข้อความตามลำดับ
-                for message in sorted(messages, key=lambda x: x.get('order', 0)):
-                    message_type = message.get('type', 'text')
-                    content = message.get('content', '')
-                    
-                    logger.info(f"Sending {message_type} message to {psid}")
-                    
-                    # 🔥 ส่งข้อความโดยตรงผ่าน facebook_api แทนการเรียก endpoint
-                    # เพื่อหลีกเลี่ยงการอัพเดท interaction time
-                    if message_type == 'text':
-                        result = send_message(psid, content, access_token)
-                    elif message_type == 'image':
-                        from app.config import image_dir
-                        clean_content = content.replace('[IMAGE] ', '')
-                        image_path = f"{image_dir}/{clean_content}"
-                        result = send_image_binary(psid, image_path, access_token)
-                    elif message_type == 'video':
-                        from app.config import vid_dir
-                        clean_content = content.replace('[VIDEO] ', '')
-                        video_path = f"{vid_dir}/{clean_content}"
-                        result = send_video_binary(psid, video_path, access_token)
-                    else:
-                        continue
-                        
-                    if 'error' in result:
-                        logger.error(f"Error sending message to {psid}: {result}")
-                        fail_count += 1
-                        break
-                    else:
-                        logger.info(f"Successfully sent message to {psid}")
-                        await asyncio.sleep(0.5)
-                        
-                success_count += 1
-                await asyncio.sleep(1)
-                
-            except Exception as e:
-                logger.error(f"Error sending messages to {psid}: {e}")
-                fail_count += 1
-                
-        logger.info(f"Sent messages complete: {success_count} success, {fail_count} failed")
+        db = SessionLocal()
         
+        try:
+            page = crud.get_page_by_page_id(db, page_id)
+            if not page:
+                logger.error(f"Page {page_id} not found in database")
+                return
+            
+            for psid in psids:
+                try:
+                    # ส่งข้อความ (โค้ดเดิม)
+                    for message in sorted(messages, key=lambda x: x.get('order', 0)):
+                        message_type = message.get('type', 'text')
+                        content = message.get('content', '')
+                        logger.info(f"Sending {message_type} message to {psid}")
+                        if message_type == 'text':
+                            result = send_message(psid, content, access_token)
+                        elif message_type == 'image':
+                            from app.config import image_dir
+                            clean_content = content.replace('[IMAGE] ', '')
+                            image_path = f"{image_dir}/{clean_content}"
+                            result = send_image_binary(psid, image_path, access_token)
+                        elif message_type == 'video':
+                            from app.config import vid_dir
+                            clean_content = content.replace('[VIDEO] ', '')
+                            video_path = f"{vid_dir}/{clean_content}"
+                            result = send_video_binary(psid, video_path, access_token)
+                        else:
+                            continue
+                        if 'error' in result:
+                            logger.error(f"Error sending message to {psid}: {result}")
+                            fail_count += 1
+                            break
+                        else:
+                            logger.info(f"Successfully sent message to {psid}")
+                            await asyncio.sleep(0.5)
+                    
+                    # อัพเดท customer type ถ้าส่งสำเร็จ
+                    if schedule and 'groups' in schedule and len(schedule['groups']) > 0:
+                        group_id = schedule['groups'][0]
+                        if not str(group_id).startswith('default_'):
+                            try:
+                                # อัพเดท customer_type_custom_id
+                                customer = crud.get_customer_by_psid(db, page.ID, psid)
+                                if customer:
+                                    group_id_int = int(group_id) if isinstance(group_id, str) else group_id
+                                    # ดึงข้อมูลกลุ่ม
+                                    customer_group = db.query(models.CustomerTypeCustom).filter(
+                                        models.CustomerTypeCustom.id == group_id_int
+                                    ).first()
+                                    if customer_group:
+                                        customer.customer_type_custom_id = group_id_int
+                                        customer.updated_at = datetime.now()
+                                        db.commit()
+                                        db.refresh(customer)
+                                        logger.info(f"✅ Updated customer {psid} to group {group_id_int}")
+                                        # ส่ง SSE update
+                                        await send_customer_type_update(
+                                            page_id=page_id,
+                                            psid=psid,
+                                            customer_type_name=customer_group.type_name,
+                                            customer_type_custom_id=group_id_int
+                                        )
+                            except Exception as e:
+                                logger.error(f"❌ Error updating customer type: {e}")
+                                db.rollback()
+                    
+                    success_count += 1
+                    await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    logger.error(f"Error sending messages to {psid}: {e}")
+                    fail_count += 1
+                    
+        finally:
+            db.close()
+            
+        logger.info(f"Sent messages complete: {success_count} success, {fail_count} failed")
+     
+    # API สำหรับจัดการการทำซ้ำของ schedule   
     async def handle_repeat(self, page_id: str, schedule: Dict[str, Any], current_time: datetime):
         """จัดการการทำซ้ำของ schedule"""
         repeat_info = schedule.get('repeat', {})
@@ -445,11 +498,13 @@ class MessageScheduler:
         
         # Reset tracking สำหรับรอบใหม่
         self.sent_tracking[schedule_id] = set()
-        
+    
+    # API สำหรับดึง active schedules สำหรับ page    
     def get_active_schedules_for_page(self, page_id: str):
         """ดึง active schedules สำหรับ page"""
         return self.active_schedules.get(page_id, [])
-        
+    
+    # API สำหรับเริ่มระบบ scheduler    
     def stop(self):
         """หยุดระบบ scheduler"""
         self.is_running = False

@@ -1,7 +1,7 @@
-# backend/app/task/bg_task.py
 from app.database.database import SessionLocal
 import asyncio
 
+# API สำหรับรัน background task เพื่อ sync ข้อมูลลูกค้า
 def run_sync_customer_background(page_id: str):
     """รัน sync ใน background"""
     db = SessionLocal()
@@ -26,3 +26,29 @@ def run_sync_customer_background(page_id: str):
         db.close()
         if loop:
             loop.close()
+
+import asyncio
+from app.database import SessionLocal
+
+def run_sync_customer_messages_background(page_id: str):
+    db = SessionLocal()
+    loop = None
+    try:
+        from app.routes.facebook.psids_sync import sync_messages_for_page
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            result = loop.run_until_complete(sync_messages_for_page(page_id, db=db))
+        else:
+            result = asyncio.run(sync_messages_for_page(page_id, db=db))
+
+        print(f"✅ Background sync completed: {result}")
+
+    except Exception as e:
+        print(f"❌ Background sync failed: {e}")
+    finally:
+        db.close()
