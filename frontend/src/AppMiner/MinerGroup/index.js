@@ -16,6 +16,7 @@ import EmptyState from './components/EmptyState';
 import ScheduleModal from './components/ScheduleModal';
 import GroupDetailModal from './components/GroupDetailModal';  // เพิ่ม import
 import KnowledgeSettingsModal from './components/KnowledgeSettingsModal';
+import EditGroupModal from './components/EditGroupModal';
 
 import '../../CSS/MinerGroup.css';
 
@@ -40,6 +41,10 @@ function MinerGroup() {
   const [showDetailModal, setShowDetailModal] = useState(false);  // เพิ่ม state สำหรับ detail modal
   const [selectedGroupDetail, setSelectedGroupDetail] = useState(null);  // เพิ่ม state สำหรับเก็บข้อมูลกลุ่มที่เลือก
   const [showKnowledgeSettings, setShowKnowledgeSettings] = useState(false);
+
+  // ในส่วน state management เพิ่ม:
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
 
   // Custom Hooks
   const {
@@ -109,51 +114,87 @@ function MinerGroup() {
     }
   };
 
+  // ฟังก์ชันสำหรับดู schedules ของกลุ่ม
   const handleStartEdit = (group) => {
-    setEditingGroupId(group.id);
-  };
+  setEditingGroup(group);
+  setShowEditModal(true);
+};
 
+  // ฟังก์ชันสำหรับดูรายละเอียดกลุ่ม
   const handleSaveEdit = async (editData) => {
-    if (!editData.type_name.trim()) {
-      alert("กรุณากรอกชื่อกลุ่ม");
-      return;
-    }
+  if (!editData.type_name.trim()) {
+    alert("กรุณากรอกชื่อกลุ่ม");
+    return;
+  }
 
-    try {
-      if (editingGroupId.toString().startsWith('default_')) {
-        const customNamesKey = `defaultGroupCustomNames_${selectedPage}`;
-        const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
-        customNames[editingGroupId] = editData.type_name;
-        localStorage.setItem(customNamesKey, JSON.stringify(customNames));
-        
-        await fetchCustomerGroups(selectedPage);
-      } else {
-        const response = await fetch(`http://localhost:8000/customer-groups/${editingGroupId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type_name: editData.type_name.trim(),
-            rule_description: editData.rule_description.trim(),
-            keywords: editData.keywords.split(',').map(k => k.trim()).filter(k => k),
-            examples: editData.examples.split('\n').map(e => e.trim()).filter(e => e)
-          })
-        });
+  try {
+    if (editingGroup && editingGroup.isKnowledge) {
+      // สำหรับ knowledge group
+      const knowledgeId = editingGroup.id.toString().replace('knowledge_', '');
+      
+      const response = await fetch(`http://localhost:8000/customer-type-knowledge/${knowledgeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type_name: editData.type_name.trim(),
+          rule_description: editData.rule_description?.trim() || '',
+          keywords: editData.keywords || '',
+          examples: editData.examples || ''
+        })
+      });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Failed to update customer group');
-        }
-        
-        await fetchCustomerGroups(selectedPage);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update knowledge type');
       }
       
-      setEditingGroupId(null);
-    } catch (error) {
-      console.error('Error updating customer group:', error);
-      alert(`เกิดข้อผิดพลาดในการแก้ไขกลุ่ม: ${error.message}`);
-    }
-  };
+      const result = await response.json();
+      alert(result.message || 'อัพเดทข้อมูลสำเร็จ');
+      
+    } else if (editingGroup && editingGroup.id.toString().startsWith('default_')) {
+      // สำหรับ default groups
+      const customNamesKey = `defaultGroupCustomNames_${selectedPage}`;
+      const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+      customNames[editingGroup.id] = editData.type_name;
+      localStorage.setItem(customNamesKey, JSON.stringify(customNames));
+      
+    } else {
+      // สำหรับ user groups
+      const response = await fetch(`http://localhost:8000/customer-groups/${editingGroup.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type_name: editData.type_name.trim(),
+          rule_description: editData.rule_description?.trim() || '',
+          keywords: editData.keywords.split(',').map(k => k.trim()).filter(k => k),
+          examples: editData.examples.split('\n').map(e => e.trim()).filter(e => e)
+        })
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update customer group');
+      }
+    }
+    
+    // ปิด modal และโหลดข้อมูลใหม่
+    setShowEditModal(false);
+    setEditingGroup(null);
+    await fetchCustomerGroups(selectedPage);
+    
+  } catch (error) {
+    console.error('Error updating group:', error);
+    alert(`เกิดข้อผิดพลาดในการแก้ไข: ${error.message}`);
+  }
+};
+
+  // เพิ่มฟังก์ชันสำหรับปิด modal
+const handleCloseEditModal = () => {
+  setShowEditModal(false);
+  setEditingGroup(null);
+};
+
+  // ฟังก์ชันสำหรับลบกลุ่ม
   const handleDeleteGroup = async (groupId) => {
     const group = customerGroups.find(g => g.id === groupId);
     
@@ -383,19 +424,26 @@ function MinerGroup() {
           ) : (
             <>
               <GroupsGrid
-                defaultGroups={filteredKnowledgeGroups} // ส่ง knowledge groups แทน default groups
+                defaultGroups={filteredKnowledgeGroups}
                 userGroups={filteredUserGroups}
                 selectedGroups={selectedGroups}
-                editingGroupId={editingGroupId}
+                editingGroupId={null} // เปลี่ยนเป็น null เพราะไม่ใช้แล้ว
                 groupScheduleCounts={groupScheduleCounts}
                 onToggleSelect={toggleGroupSelection}
-                onStartEdit={handleStartEdit}
+                onStartEdit={handleStartEdit} // เรียก handleStartEdit แทน
                 onDelete={handleDeleteGroup}
                 onEditMessages={handleEditMessages}
                 onViewSchedules={handleViewSchedules}
-                onSaveEdit={handleSaveEdit}
-                onCancelEdit={() => setEditingGroupId(null)}
+                onSaveEdit={() => {}} // ไม่ใช้แล้ว
+                onCancelEdit={() => {}} // ไม่ใช้แล้ว
                 onViewDetails={handleViewDetails}
+              />
+
+              <EditGroupModal 
+                show={showEditModal}
+                group={editingGroup}
+                onSave={handleSaveEdit}
+                onClose={handleCloseEditModal}
               />
 
               <ActionBar

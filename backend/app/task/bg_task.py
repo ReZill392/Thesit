@@ -27,9 +27,6 @@ def run_sync_customer_background(page_id: str):
         if loop:
             loop.close()
 
-import asyncio
-from app.database import SessionLocal
-
 def run_sync_customer_messages_background(page_id: str):
     db = SessionLocal()
     loop = None

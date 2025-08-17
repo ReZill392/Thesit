@@ -60,7 +60,9 @@ export const fetchConversations = async (pageId) => {
         console.log(`Customer ${idx + 1}:`, {
           name: customer.name,
           customer_type_custom_id: customer.customer_type_custom_id,
-          customer_type_name: customer.customer_type_name
+          customer_type_name: customer.customer_type_name,
+          customer_type_knowledge_id: customer.customer_type_knowledge_id,
+          customer_type_knowledge_name: customer.customer_type_knowledge_name
         });
       }
     });
@@ -78,9 +80,11 @@ export const fetchConversations = async (pageId) => {
       user_name: conv.name,
       raw_psid: conv.customer_psid,
       source_type: conv.source_type,
-      // เพิ่มข้อมูล customer type
+      // เพิ่มข้อมูล customer type ทั้ง 2 ประเภท
       customer_type_custom_id: conv.customer_type_custom_id,
-      customer_type_name: conv.customer_type_name
+      customer_type_name: conv.customer_type_name,
+      customer_type_knowledge_id: conv.customer_type_knowledge_id,
+      customer_type_knowledge_name: conv.customer_type_knowledge_name
     }));
 
     return formattedConversations;
@@ -323,5 +327,16 @@ export async function getCustomerTypeKnowledge() {
 export async function getPageCustomerTypeKnowledge(pageId) {
   const res = await fetch(`http://localhost:8000/page-customer-type-knowledge/${pageId}`);
   if (!res.ok) throw new Error("ไม่สามารถโหลด page customer type knowledge ได้");
+  return res.json();
+}
+
+// ฟังก์ชันสำหรับอัพเดท Knowledge Type
+export async function updateCustomerTypeKnowledge(knowledgeId, updateData) {
+  const res = await fetch(`http://localhost:8000/customer-type-knowledge/${knowledgeId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updateData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถแก้ไข knowledge type ได้");
   return res.json();
 }

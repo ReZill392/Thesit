@@ -17,7 +17,7 @@ class FacebookPage(Base):
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="page", cascade="all, delete-orphan")
     customers = relationship("FbCustomer", back_populates="page", cascade="all, delete-orphan")
     page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="page", cascade="all, delete-orphan")
-    retarget_tiers = relationship("RetargetTierConfig",back_populates="page",cascade="all, delete-orphan",passive_deletes=True)
+    retarget_tiers_config = relationship("RetargetTiersConfig", back_populates="page", cascade="all, delete-orphan")
 
 class CustomerTypeCustom(Base):
     __tablename__ = "customer_type_custom"
@@ -133,8 +133,7 @@ class FbCustomer(Base):
     page = relationship("FacebookPage", back_populates="customers", foreign_keys=[page_id])
     customer_type_custom = relationship("CustomerTypeCustom", back_populates="customers")
     customer_type_knowledge = relationship("CustomerTypeKnowledge", back_populates="customers")
-    customermessage = relationship("CustomerMessage",back_populates="customer",cascade="all, delete-orphan",passive_deletes=True)
-
+    customermessage = relationship("CustomerMessage", back_populates="customer", cascade="all, delete-orphan")
 
 class MessageSets(Base):
     __tablename__ = "message_sets"
@@ -169,11 +168,9 @@ class PageCustomerTypeKnowledge(Base):
     __tablename__ = "page_customer_type_knowledge"
 
     id = Column(Integer, primary_key=True, index=True)
-    page_id = Column(String, ForeignKey("facebook_pages.page_id", ondelete="CASCADE"), nullable=False)
+    page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
     customer_type_knowledge_id = Column(Integer, ForeignKey("customer_type_knowledge.id", ondelete="SET NULL"), nullable=True)
-    is_active = Column(Boolean, server_default="true")
-    content = Column(Text, nullable=False)
-    display_order = Column(Integer, nullable=False)
+    is_enabled = Column(Boolean, server_default="true")  
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
@@ -181,8 +178,8 @@ class PageCustomerTypeKnowledge(Base):
     page = relationship("FacebookPage", back_populates="page_customer_type_knowledge", foreign_keys=[page_id])
     customer_type_knowledge = relationship("CustomerTypeKnowledge", back_populates="page_customer_type_knowledge")
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="page_customer_type_knowledge_rel")
-
-class RetargetTierConfig(Base):
+    
+class RetargetTiersConfig(Base):
     __tablename__ = "retarget_tiers_config"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -192,16 +189,16 @@ class RetargetTierConfig(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    page = relationship("FacebookPage", back_populates="retarget_tiers", foreign_keys=[page_id])
+    page = relationship("FacebookPage", back_populates="retarget_tiers_config", foreign_keys=[page_id])
 
     __table_args__ = (
         CheckConstraint(
             "tier_name IN ('หาย', 'หายนาน', 'หายนานมากๆ')",
-            name="retarget_tiers_config_tier_name_check"
+            name="chk_tier_name"
         ),
         CheckConstraint(
             "days_since_last_contact > 0",
-            name="retarget_tiers_config_days_since_last_contact_check"
+            name="chk_days_contact"
         ),
     )
 

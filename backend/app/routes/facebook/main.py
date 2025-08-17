@@ -16,7 +16,9 @@ from .schedules import router as schedules_router
 from .file_search import router as file_search_router
 from .sse import router as sse_router
 from .schedules import router as schedules_router
+from .imported_customers import router as imported_customers_router
 from .psids_sync import router as psids_sync_router
+
 # สร้าง main router
 router = APIRouter()
 
@@ -31,6 +33,7 @@ router.include_router(file_search_router, tags=["File Search"])
 router.include_router(sse_router, tags=["SSE"])
 router.include_router(psids_sync_router, tags=["psids_sync"])
 router.include_router(schedules_router, tags=["Facebook Schedules"])
+router.include_router(imported_customers_router, tags=["Facebook ImportedCustomers"])
 
 # API สำหรับตรวจสอบว่า router ทำงานได้หรือไม่
 @router.get("/debug/tokens")
