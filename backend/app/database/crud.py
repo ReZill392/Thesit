@@ -1,5 +1,3 @@
-# ไฟล์ crud.py ที่สมบูรณ์พร้อม imports ทั้งหมด
-
 from sqlalchemy.orm import Session
 from app.database.models import FacebookPage, FbCustomer
 from app.database.schemas import FacebookPageCreate, FacebookPageUpdate
@@ -64,7 +62,7 @@ def get_all_connected_pages(db: Session):
 # ========== FbCustomer CRUD Operations ==========
 
 def get_customer_by_psid(db: Session, page_id: int, customer_psid: str):
-    """ดึงข้อมูลลูกค้าจาก PSID และ Page ID"""
+    """ดึงข้อมูลลูกค้าจาก PSID และ Page ID พร้อม eager loading"""
     return db.query(models.FbCustomer).filter(
         models.FbCustomer.page_id == page_id,
         models.FbCustomer.customer_psid == customer_psid
@@ -95,12 +93,6 @@ def create_or_update_customer(db: Session, page_id: int, customer_psid: str, cus
             if not existing_customer.last_interaction_at or new_interaction > existing_customer.last_interaction_at:
                 existing_customer.last_interaction_at = new_interaction
         
-        # อัพเดท customer type ถ้ามี
-        if 'customer_type_custom_id' in customer_data:
-            existing_customer.customer_type_custom_id = customer_data['customer_type_custom_id']
-        if 'customer_type_knowledge_id' in customer_data:
-            existing_customer.customer_type_knowledge_id = customer_data['customer_type_knowledge_id']
-        
         # updated_at จะอัพเดทอัตโนมัติเมื่อมีการเปลี่ยนแปลง
         existing_customer.updated_at = datetime.now()
         
@@ -123,11 +115,9 @@ def create_or_update_customer(db: Session, page_id: int, customer_psid: str, cus
             page_id=page_id,
             customer_psid=customer_psid,
             name=customer_data.get('name', ''),
-            customer_type_custom_id=customer_data.get('customer_type_custom_id'),
-            customer_type_knowledge_id=customer_data.get('customer_type_knowledge_id'),
             first_interaction_at=first_interaction,
             last_interaction_at=last_interaction,
-            source_type=source_type
+            source_type=source_type,
             # created_at, updated_at handled by DB
         )
         db.add(db_customer)
@@ -197,8 +187,11 @@ def get_customer_with_conversation_data(db: Session, page_id: int):
     return result
 
 def get_customers_by_page_with_details(db: Session, page_id: int, skip: int = 0, limit: int = 100):
-    """ดึงรายชื่อลูกค้าพร้อมรายละเอียดทั้งหมด"""
-    customers = db.query(models.FbCustomer).filter(
+    """ดึงรายชื่อลูกค้าพร้อมรายละเอียดทั้งหมด รวมทั้ง knowledge groups"""
+    customers = db.query(models.FbCustomer).options(
+        joinedload(models.FbCustomer.customer_type_custom),
+        joinedload(models.FbCustomer.customer_type_knowledge)
+    ).filter(
         models.FbCustomer.page_id == page_id
     ).order_by(models.FbCustomer.last_interaction_at.desc()).offset(skip).limit(limit).all()
     
@@ -209,7 +202,11 @@ def get_customers_by_page_with_details(db: Session, page_id: int, skip: int = 0,
             "page_id": customer.page_id,
             "customer_psid": customer.customer_psid,
             "name": customer.name,
+            # User Groups
+            "customer_type_custom_id": customer.customer_type_custom_id,
             "customer_type_custom": customer.customer_type_custom.type_name if customer.customer_type_custom else None,
+            # Knowledge Groups
+            "customer_type_knowledge_id": customer.customer_type_knowledge_id,
             "customer_type_knowledge": customer.customer_type_knowledge.type_name if customer.customer_type_knowledge else None,
             "first_interaction_at": customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
             "last_interaction_at": customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
@@ -456,12 +453,10 @@ def get_customer_type_statistics(db: Session, page_id: int):
     return statistics
 
 def get_customers_updated_after(db: Session, page_id: int, after_time: datetime):
-    """Get customers updated after specific time"""
+    """Get customers updated after specific time with both custom and knowledge types"""
     try:
-        # ใช้ joinedload เพื่อหลีกเลี่ยง lazy loading
-        customers = db.query(models.FbCustomer).options(
-            joinedload(models.FbCustomer.customer_type_custom)
-        ).filter(
+        # ใช้ joinedload เพื่อดึงข้อมูลทั้ง 2 ประเภท
+        customers = db.query(models.FbCustomer).filter(
             models.FbCustomer.page_id == page_id,
             models.FbCustomer.updated_at > after_time
         ).all()

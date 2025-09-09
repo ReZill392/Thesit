@@ -35,10 +35,7 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
     install_date = page.created_at
     
     # ดึง customer พร้อม eager load ทั้ง customer_type_custom และ customer_type_knowledge
-    customers_query = db.query(FbCustomer).options(
-        joinedload(FbCustomer.customer_type_custom),
-        joinedload(FbCustomer.customer_type_knowledge)
-    ).filter(FbCustomer.page_id == page.ID)
+    customers_query = db.query(FbCustomer).filter(FbCustomer.page_id == page.ID)
     
     # กรองตามเงื่อนไข
     customers = customers_query.filter(
@@ -63,16 +60,12 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
             "page_id": customer.page_id,
             "customer_psid": customer.customer_psid,
             "name": customer.name,
-            "customer_type_custom_id": customer.customer_type_custom_id,
-            "customer_type_knowledge_id": customer.customer_type_knowledge_id,
             "first_interaction_at": customer.first_interaction_at,
             "last_interaction_at": customer.last_interaction_at,
             "created_at": customer.created_at,
             "updated_at": customer.updated_at,
             "source_type": customer.source_type,
-            # เพิ่มชื่อกลุ่มทั้ง 2 ประเภท
-            "customer_type_name": customer.customer_type_custom.type_name if customer.customer_type_custom else None,
-            "customer_type_knowledge_name": customer.customer_type_knowledge.type_name if customer.customer_type_knowledge else None
+            "current_category_id": customer.current_category_id
         }
         result.append(customer_data)
     
@@ -81,9 +74,7 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
     # Debug: แสดงข้อมูล customer type
     for idx, customer in enumerate(customers[:5]):  # แสดง 5 คนแรก
         print(f"Customer {idx+1}: {customer.name}")
-        print(f"  - User Group: {customer.customer_type_custom.type_name if customer.customer_type_custom else 'None'}")
-        print(f"  - Knowledge Group: {customer.customer_type_knowledge.type_name if customer.customer_type_knowledge else 'None'}")
-    
+        
     return result
 
 # เพิ่ม endpoint สำหรับ debug

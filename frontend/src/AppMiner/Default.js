@@ -340,15 +340,13 @@ function SetDefault() {
       <Sidebar />
 
       <div className="message-settings-container">
-        <h1 className="header">
+        
+       
+        <h3 className="header" style={{background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" , width:"380px" , marginLeft:"30%" , borderRadius:"20px" , color:"white" , boxShadow: "0 4px 15px rgba(0, 0, 0, 0.3)" }} >
           {isEditMode ? "แก้ไขชุดข้อความ" : "ตั้งค่าลำดับข้อความ Default"}
-        </h1>
-
-        <div className="page-info">
-          <p style={{ textAlign: "center" }}>
-            <strong>เพจที่เลือก:</strong> {selectedPage ? "กำลังใช้งานเพจที่เลือก" : "กรุณาเลือกเพจ"}
-          </p>
-        </div>
+        </h3>
+       
+        
 
         <div className="sequence-container">
           <div className="sequence-card">
@@ -508,8 +506,8 @@ function SetDefault() {
           </div>
         </div>
 
-        <Link to="/manage-message-sets" className="back-button">
-          ← กลับไปหน้ารายการชุดข้อความ
+        <Link to="/manage-message-sets" className="back-btn" >
+          ← 
         </Link>
       </div>
     </div>

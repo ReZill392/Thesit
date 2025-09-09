@@ -34,7 +34,7 @@ const GroupCard = ({
       {isKnowledge && (
         <div className="knowledge-badge">
           <span className="badge-text">กลุ่มพื้นฐาน</span>
-          {isDisabled && <span className="disabled-indicator"> (ปิดใช้งาน)</span>}
+          
         </div>
       )}
       {isDefault && <div className="default-badge">พื้นฐาน</div>}
@@ -100,7 +100,7 @@ const GroupCard = ({
             <button onClick={(e) => {
               e.stopPropagation();
               onViewDetails(group);
-            }} className="action-btn detail-btn" style={{ width: isKnowledge && isDisabled ? '100%' : '190px' }}>
+            }} className="action-btn detail-btn" style={{ width: isKnowledge && isDisabled ? '100%' : '190px' , fontSize: '14px' }}>
               📋 รายละเอียด
             </button>
           )}

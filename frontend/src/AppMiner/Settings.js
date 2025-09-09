@@ -92,11 +92,7 @@ function Settings() {
         border: '#4a5568'
       }
     },
-    auto: {
-      name: 'อัตโนมัติ',
-      icon: '🌓',
-      colors: null
-    }
+    
   };
 
   // Color presets
@@ -119,13 +115,94 @@ function Settings() {
     xlarge: { label: 'ใหญ่มาก', value: '18px', scale: 1.25 }
   };
 
+  // Apply Dark Mode to ALL pages
+  const applyDarkMode = (theme) => {
+    const root = document.documentElement;
+    const body = document.body;
+    
+    // Remove existing theme classes
+    root.classList.remove('theme-light', 'theme-dark', 'theme-auto');
+    body.classList.remove('theme-light', 'theme-dark', 'theme-auto');
+    
+    // Apply theme to both root and body
+    if (theme === 'dark') {
+      root.classList.add('theme-dark');
+      body.classList.add('theme-dark');
+      root.setAttribute('data-theme', 'dark');
+      
+      // Apply dark mode CSS variables globally
+      root.style.setProperty('--bg-primary', '#1a202c');
+      root.style.setProperty('--bg-secondary', '#2d3748');
+      root.style.setProperty('--bg-sidebar', '#111827');
+      root.style.setProperty('--text-primary', '#e2e8f0');
+      root.style.setProperty('--text-secondary', '#a0aec0');
+      root.style.setProperty('--gray-800', '#e2e8f0');
+      root.style.setProperty('--gray-700', '#cbd5e0');
+      root.style.setProperty('--gray-600', '#a0aec0');
+      root.style.setProperty('--gray-500', '#718096');
+      root.style.setProperty('--gray-200', '#4a5568');
+      root.style.setProperty('--gray-100', '#374151');
+      root.style.setProperty('--gray-50', '#2d3748');
+      
+      // Update other color variables for dark mode
+      root.style.setProperty('--card-bg', '#2d3748');
+      root.style.setProperty('--card-border', '#4a5568');
+      root.style.setProperty('--hover-bg', '#374151');
+      root.style.setProperty('--border-color', '#4a5568');
+      
+    } else if (theme === 'light') {
+      root.classList.add('theme-light');
+      body.classList.add('theme-light');
+      root.setAttribute('data-theme', 'light');
+      
+      // Reset to light mode colors
+      root.style.setProperty('--bg-primary', '#f3f4f6');
+      root.style.setProperty('--bg-secondary', '#ffffff');
+      root.style.setProperty('--bg-sidebar', '#1f2937');
+      root.style.setProperty('--text-primary', '#2d3748');
+      root.style.setProperty('--text-secondary', '#718096');
+      root.style.setProperty('--gray-800', '#1f2937');
+      root.style.setProperty('--gray-700', '#374151');
+      root.style.setProperty('--gray-600', '#4b5563');
+      root.style.setProperty('--gray-500', '#6b7280');
+      root.style.setProperty('--gray-200', '#e5e7eb');
+      root.style.setProperty('--gray-100', '#f3f4f6');
+      root.style.setProperty('--gray-50', '#f9fafb');
+      
+      // Reset other color variables for light mode
+      root.style.setProperty('--card-bg', '#ffffff');
+      root.style.setProperty('--card-border', '#e0e0e0');
+      root.style.setProperty('--hover-bg', '#f1f3f5');
+      root.style.setProperty('--border-color', '#e2e8f0');
+      
+    } else if (theme === 'auto') {
+      root.classList.add('theme-auto');
+      body.classList.add('theme-auto');
+      root.setAttribute('data-theme', 'auto');
+      
+      // Check system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        applyDarkMode('dark');
+      } else {
+        applyDarkMode('light');
+      }
+    }
+    
+    // Save theme preference
+    localStorage.setItem('appTheme', theme);
+    
+    // Broadcast theme change to other components
+    window.dispatchEvent(new CustomEvent('themeChange', { detail: { theme } }));
+  };
+
   // Apply settings to DOM
   const applySettings = (newSettings) => {
     const root = document.documentElement;
     const body = document.body;
     
-    // Theme
-    root.setAttribute('data-theme', newSettings.theme);
+    // Apply theme
+    applyDarkMode(newSettings.theme);
     
     // Colors
     root.style.setProperty('--primary-color', newSettings.primaryColor);
@@ -161,6 +238,29 @@ function Settings() {
     root.setAttribute('lang', newSettings.language);
   };
 
+  // Load saved theme on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('appTheme');
+    if (savedTheme) {
+      const updatedSettings = { ...settings, theme: savedTheme };
+      setSettings(updatedSettings);
+      applySettings(updatedSettings);
+    } else {
+      applySettings(settings);
+    }
+    
+    // Listen for system theme changes
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = (e) => {
+      if (settings.theme === 'auto') {
+        applyDarkMode('auto');
+      }
+    };
+    
+    mediaQuery.addEventListener('change', handleThemeChange);
+    return () => mediaQuery.removeEventListener('change', handleThemeChange);
+  }, []);
+
   // Save settings
   useEffect(() => {
     localStorage.setItem('appSettings', JSON.stringify(settings));
@@ -174,11 +274,17 @@ function Settings() {
       [key]: value
     }));
     setHasUnsavedChanges(true);
+    
+    // Apply theme immediately
+    if (key === 'theme') {
+      applyDarkMode(value);
+    }
   };
 
   // Save all settings
   const saveSettings = () => {
     localStorage.setItem('appSettings', JSON.stringify(settings));
+    localStorage.setItem('appTheme', settings.theme);
     setShowSaveNotification(true);
     setHasUnsavedChanges(false);
     setTimeout(() => setShowSaveNotification(false), 3000);
@@ -188,37 +294,8 @@ function Settings() {
   const resetSettings = () => {
     if (window.confirm('คุณต้องการรีเซ็ตการตั้งค่าทั้งหมดเป็นค่าเริ่มต้นหรือไม่?')) {
       localStorage.removeItem('appSettings');
+      localStorage.removeItem('appTheme');
       window.location.reload();
-    }
-  };
-
-  // Export settings
-  const exportSettings = () => {
-    const dataStr = JSON.stringify(settings, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `settings_${new Date().toISOString().split('T')[0]}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-  };
-
-  // Import settings
-  const importSettings = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const importedSettings = JSON.parse(e.target.result);
-          setSettings(importedSettings);
-          saveSettings();
-        } catch (error) {
-          alert('ไม่สามารถอ่านไฟล์การตั้งค่าได้');
-        }
-      };
-      reader.readAsText(file);
     }
   };
 
@@ -247,7 +324,7 @@ function Settings() {
   };
 
   return (
-    <div className="settings-page" style={{marginLeft:"70px"}}>
+    <div className="settings-page" style={{marginLeft:"50px"}}>
       <Sidebar />
       <div className="settings-container">
         <div className="settings-header">
@@ -316,21 +393,8 @@ function Settings() {
         </div>
 
         <div className="settings-footer">
-          <div className="footer-left">
-            <button onClick={exportSettings} className="btn-secondary">
-              📥 Export การตั้งค่า
-            </button>
-            <label className="btn-secondary">
-              📤 Import การตั้งค่า
-              <input 
-                type="file" 
-                accept=".json"
-                onChange={importSettings}
-                style={{ display: 'none' }}
-              />
-            </label>
-          </div>
-          <div className="footer-right">
+          
+          <div className="footer-right" style={{marginLeft:"780px"}}>
             <button onClick={resetSettings} className="btn-danger">
               🔄 รีเซ็ตทั้งหมด
             </button>
@@ -392,12 +456,7 @@ const GeneralSettings = ({ settings, updateSetting }) => {
           >
             🌙 มืด
           </div>
-          <div 
-            className={`theme-option ${settings.theme === 'auto' ? 'active' : ''}`}
-            onClick={() => updateSetting('theme', 'auto')}
-          >
-            🌓 อัตโนมัติ
-          </div>
+          
         </div>
       </div>
 
@@ -474,43 +533,6 @@ const DisplaySettings = ({ settings, updateSetting }) => {
       <h2 className="section-title">การแสดงผล</h2>
       
       <div className="setting-group">
-        <label className="setting-label">ตำแหน่ง Sidebar</label>
-        <div className="radio-group">
-          <label className="radio-option">
-            <input
-              type="radio"
-              value="left"
-              checked={settings.sidebarPosition === 'left'}
-              onChange={(e) => updateSetting('sidebarPosition', e.target.value)}
-            />
-            ซ้าย
-          </label>
-          <label className="radio-option">
-            <input
-              type="radio"
-              value="right"
-              checked={settings.sidebarPosition === 'right'}
-              onChange={(e) => updateSetting('sidebarPosition', e.target.value)}
-            />
-            ขวา
-          </label>
-        </div>
-      </div>
-
-      <div className="setting-group">
-        <label className="setting-label">ขนาด Sidebar</label>
-        <select 
-          value={settings.sidebarWidth}
-          onChange={(e) => updateSetting('sidebarWidth', e.target.value)}
-          className="setting-select"
-        >
-          <option value="narrow">แคบ (200px)</option>
-          <option value="normal">ปกติ (250px)</option>
-          <option value="wide">กว้าง (300px)</option>
-        </select>
-      </div>
-
-      <div className="setting-group">
         <label className="setting-label">
           <input
             type="checkbox"
@@ -554,16 +576,7 @@ const DisplaySettings = ({ settings, updateSetting }) => {
         </label>
       </div>
 
-      <div className="setting-group">
-        <label className="setting-label">
-          <input
-            type="checkbox"
-            checked={settings.highContrast}
-            onChange={(e) => updateSetting('highContrast', e.target.checked)}
-          />
-          โหมดความคมชัดสูง
-        </label>
-      </div>
+     
     </div>
   );
 };
