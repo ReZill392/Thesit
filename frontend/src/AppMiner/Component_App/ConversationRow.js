@@ -21,39 +21,40 @@ const ConversationRow = React.memo(({
   onInactivityChange,
   isRecentlyUpdated
 }) => {
-  // ฟังก์ชันแสดงหมวดหมู่ลูกค้า - รองรับทั้ง 2 ประเภท
+  // ตรวจสอบและแสดงชื่อที่ถูกต้อง
+  const displayName = conv.conversation_name || conv.user_name || `User...${(conv.raw_psid || '').slice(-8)}` || `บทสนทนาที่ ${idx + 1}`;
+  
+  // ฟังก์ชันแสดงหมวดหมู่ลูกค้า
   const getCustomerTypeDisplay = () => {
-    // สร้าง array เก็บหมวดหมู่ทั้งหมด
     const types = [];
     
-    // ถ้ามี User Group (กลุ่มที่ user สร้าง)
     if (conv.customer_type_name && conv.customer_type_custom_id) {
       types.push({
         name: conv.customer_type_name,
         color: "#667eea",
-        type: "user",
+        type: "custom",
         icon: "👤",
-        id: conv.customer_type_custom_id
+        id: conv.customer_type_custom_id,
+        priority: 1
       });
     }
     
-    // ถ้ามี Knowledge Group (กลุ่มพื้นฐาน)
     if (conv.customer_type_knowledge_name && conv.customer_type_knowledge_id) {
       types.push({
         name: conv.customer_type_knowledge_name,
         color: "#48bb78",
         type: "knowledge",
         icon: "👤",
-        id: conv.customer_type_knowledge_id
+        id: conv.customer_type_knowledge_id,
+        priority: 2
       });
     }
     
-    return types;
+    return types.sort((a, b) => a.priority - b.priority);
   };
   
   const customerTypes = getCustomerTypeDisplay();
 
-  // Platform mapping
   const platformMap = {
     FB: {
       label: "Facebook",
@@ -66,36 +67,36 @@ const ConversationRow = React.memo(({
     },
     Line: {
       label: "Line",
-      icon: (
-        <svg width="12" height="12" viewBox="0 0 48 48" fill="currentColor">
-          <ellipse cx="24" cy="24" rx="20" ry="18" fill="#00c300"/>
-          <text x="24" y="30" textAnchor="middle" fontSize="18" fill="#fff" fontFamily="Arial">LINE</text>
-        </svg>
-      ),
+      icon: "📱",
       className: "line"
     }
   };
+  
   const platformInfo = platformMap[conv.platform] || platformMap.FB;
 
-  // Mining status mapping
   const miningStatusMap = {
-    'not_mined': { 
+    'ยังไม่ขุด': { 
       label: "ยังไม่ขุด", 
       color: "#e53e3e",
-      icon: "⭕"
+      icon: "⭕",
+      bgColor: "#fed7d7"
     },
-    'mined': { 
+    'ขุดแล้ว': { 
       label: "ขุดแล้ว", 
       color: "#48bb78",
-      icon: "✅"
+      icon: "✅",
+      bgColor: "#c6f6d5"
     },
-    'responded': { 
+    'มีการตอบกลับ': { 
       label: "มีการตอบกลับ", 
       color: "#3182ce",
-      icon: "💬"
+      icon: "💬",
+      bgColor: "#bee3f8"
     }
   };
-  const miningStatusInfo = miningStatusMap[conv.miningStatus] || miningStatusMap['not_mined'];
+
+  const currentStatus = conv.miningStatus || 'ยังไม่ขุด';
+  const miningStatusInfo = miningStatusMap[currentStatus] || miningStatusMap['ยังไม่ขุด'];
 
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
@@ -106,10 +107,10 @@ const ConversationRow = React.memo(({
       <td className="table-cell">
         <div className="user-info">
           <div className="user-avatar">
-            {conv.user_name?.charAt(0) || 'U'}
+            {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="user-details">
-            <div className="user-name" >{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</div>  {/* แสดงชื่อชื่อ */}
+            <div className="user-name">{displayName}</div>
             {conv.source_type && <CustomerInfoBadge customer={conv} />}
           </div>
         </div>
@@ -118,11 +119,11 @@ const ConversationRow = React.memo(({
       <td className="table-cell">
         <div className="date-display">
           {conv.first_interaction_at
-            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {  // แสดงวันที่ในรูปแบบไทย
+            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {   // แสดงวันที่ในรูปแบบไทย
                 year: 'numeric', month: 'short', day: 'numeric'
               })
             : conv.created_time
-              ? new Date(conv.created_time).toLocaleDateString("th-TH", {  // ใช้ created_time ถ้าไม่มี first_interaction_at
+              ? new Date(conv.created_time).toLocaleDateString("th-TH", { 
                   year: 'numeric', month: 'short', day: 'numeric'
                 })
               : "-"
@@ -130,21 +131,21 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <TimeAgoCell   
-        lastMessageTime={conv.last_user_message_time}  // ไว่้บอกระยะเวลาที่หายไป
+      <TimeAgoCell                                                            // ไว่้บอกระยะเวลาที่หายไป
+        lastMessageTime={conv.last_user_message_time}
         updatedTime={conv.updated_time}
         userId={conv.raw_psid}
         onInactivityChange={onInactivityChange}
       />
       
-      <td className="table-cell"style={{paddingLeft:"17px"}}>      {/* Platform	 */}
-        <div className={`platform-badge ${platformInfo.className}`}>  
+      <td className="table-cell" style={{paddingLeft:"17px"}}>               {/* Platform	 */}
+        <div className={`platform-badge ${platformInfo.className}`}>
           {platformInfo.icon}
           {platformInfo.label}
         </div>
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"47px"}}>  {/* หมวดหมู่ลูกค้า */}
+      <td className="table-cell" style={{paddingLeft:"47px"}}>            {/* หมวดหมู่ลูกค้า */}
         {customerTypes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
@@ -152,7 +153,9 @@ const ConversationRow = React.memo(({
                 key={`${type.type}-${type.id}-${index}`}
                 className={`customer-type-badge ${isRecentlyUpdated ? 'updating' : ''}`}
                 style={{
-                  background: type.color,
+                  background: type.type === 'custom' 
+                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+                    : 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
                   color: "#fff",
                   padding: "4px 10px",
                   borderRadius: "12px",
@@ -162,11 +165,13 @@ const ConversationRow = React.memo(({
                   alignItems: 'center',
                   gap: '4px',
                   width: 'fit-content',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                   transition: 'all 0.3s ease',
                   transform: isRecentlyUpdated ? 'scale(1.05)' : 'scale(1)'
                 }}
-                title={type.type === 'user' ? 'กลุ่มที่สร้างเอง' : 'กลุ่มพื้นฐาน (AI Classification)'}
+                title={type.type === 'custom' 
+                  ? 'กลุ่มที่กำหนดเอง' 
+                  : 'กลุ่มพื้นฐาน (AI Classification)'}
               >
                 <span style={{ fontSize: '10px' }}>{type.icon}</span>
                 {type.name}
@@ -190,21 +195,40 @@ const ConversationRow = React.memo(({
             borderRadius: "12px",
             fontSize: "13px",
             display: "inline-block",
-           
+            border: "1px dashed #cbd5e0"
           }}>
             ยังไม่จัดกลุ่ม
           </span>
         )}
       </td>
       
-      <td className="table-cell">    {/* สถานะการขุด */}
-        <div className="status-indicator" style={{ '--status-color': miningStatusInfo.color }}>
-          <span className="status-icon">{miningStatusInfo.icon}</span>
-          <span className="customer-type new">{miningStatusInfo.label}</span>
+      <td className="table-cell" style={{paddingLeft:"35px"}}>           {/* สถานะขุด */}
+        <div 
+          className="status-indicator" 
+          style={{ 
+            '--status-color': miningStatusInfo.color,
+            background: miningStatusInfo.bgColor,
+            padding: '6px 12px',
+            borderRadius: '20px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontWeight: '600',
+            fontSize: '13px',
+            border: `1px solid ${miningStatusInfo.color}`,
+            transition: 'all 0.3s ease'
+          }}
+        >
+          <span className="status-icon" style={{ fontSize: '16px' }}>
+            {miningStatusInfo.icon}
+          </span>
+          <span style={{ color: miningStatusInfo.color }}>
+            {miningStatusInfo.label}
+          </span>
         </div>
       </td>
       
-      <td className="table-cell text-center">    {/* Checkbox */}
+      <td className="table-cell text-center">                     {/* Checkbox */}
         <label className="custom-checkbox">
           <input
             type="checkbox"
@@ -215,6 +239,19 @@ const ConversationRow = React.memo(({
         </label>
       </td>
     </tr>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison สำหรับ optimization
+  return (
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isRecentlyUpdated === nextProps.isRecentlyUpdated &&
+    prevProps.conv.conversation_id === nextProps.conv.conversation_id &&
+    prevProps.conv.customer_type_name === nextProps.conv.customer_type_name &&
+    prevProps.conv.customer_type_knowledge_name === nextProps.conv.customer_type_knowledge_name &&
+    prevProps.conv.miningStatus === nextProps.conv.miningStatus &&
+    prevProps.conv.conversation_name === nextProps.conv.conversation_name &&
+    prevProps.conv.user_name === nextProps.conv.user_name &&
+    prevProps.idx === nextProps.idx
   );
 });
 

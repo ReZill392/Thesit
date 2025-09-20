@@ -7,7 +7,7 @@ from app.database.database import Base
 class FacebookPage(Base):
     __tablename__ = "facebook_pages"
 
-    ID = Column("ID", Integer, primary_key=True)
+    ID = Column( Integer, primary_key=True)
     page_id = Column(String(50), unique=True, nullable=False)
     page_name = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -22,6 +22,7 @@ class FacebookPage(Base):
     fb_customer_classifications = relationship("FBCustomerClassification", back_populates="page", foreign_keys="FBCustomerClassification.page_id")
     fb_customer_custom_classifications = relationship("FBCustomerCustomClassification", back_populates="page", foreign_keys="FBCustomerCustomClassification.page_id")
     page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="page", foreign_keys="PageCustomerTypeKnowledge.page_id")
+    custom_messages = relationship("CustomMessage", back_populates="page", foreign_keys="CustomMessage.page_id")
 
 
 class FbCustomer(Base):
@@ -31,6 +32,8 @@ class FbCustomer(Base):
     page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
     customer_psid = Column(String(50), nullable=False)
     name = Column(Text)
+    first_interaction_at = Column(DateTime(timezone=True))
+    last_interaction_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     source_type = Column(String, default='new')
@@ -51,7 +54,7 @@ class FbCustomer(Base):
     custom_classifications = relationship("FBCustomerCustomClassification", back_populates="customer", foreign_keys="FBCustomerCustomClassification.customer_id")
     mining_statuses = relationship("FBCustomerMiningStatus", back_populates="customer", foreign_keys="FBCustomerMiningStatus.customer_id")
     customermessage = relationship("CustomerMessage", back_populates="customer", cascade="all, delete-orphan", foreign_keys="CustomerMessage.customer_id")
-
+    current_category = relationship("CustomerTypeKnowledge", foreign_keys=[current_category_id])
 
 class CustomerTypeCustom(Base):
     __tablename__ = "customer_type_custom"
@@ -179,6 +182,7 @@ class MessageSets(Base):
 
     messages = relationship("FBCustomMessage", back_populates="message_set", cascade="all, delete-orphan", foreign_keys="FBCustomMessage.message_set_id")
     page = relationship("FacebookPage", back_populates="message_sets", foreign_keys=[page_id])
+    custom_messages = relationship("CustomMessage", back_populates="message_set", cascade="all, delete-orphan", foreign_keys="CustomMessage.message_set_id")
 
 
 class FBCustomMessage(Base):
@@ -291,3 +295,18 @@ class CustomerMessage(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     customer = relationship("FbCustomer", back_populates="customermessage", foreign_keys=[customer_id])
+    
+class CustomMessage(Base):
+    __tablename__ = "custom_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_set_id = Column(Integer, ForeignKey("message_sets.id", ondelete="CASCADE"), nullable=False)
+    page_id = Column(String, ForeignKey("facebook_pages.page_id", ondelete="CASCADE"), nullable=False)
+    message_type = Column(String(20), nullable=False)
+    content = Column(Text, nullable=False)
+    display_order = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # 🔗 Relationships
+    message_set = relationship("MessageSets", back_populates="custom_messages", foreign_keys=[message_set_id])
+    page = relationship("FacebookPage", back_populates="custom_messages", foreign_keys=[page_id])

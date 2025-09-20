@@ -8,6 +8,7 @@ import os
 from app.service.facebook_api import fb_get
 import logging
 import asyncio
+from app.database import models, crud
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -159,6 +160,37 @@ async def webhook_post(
                         # User เก่า - อัพเดทเวลาล่าสุดที่ทักเข้ามา
                         crud.update_customer_interaction(db, page.ID, sender_id)
                         logger.info(f"📝 อัพเดท last_interaction_at สำหรับ: {existing_customer.name}")
+                        
+                        # ตรวจสอบและอัพเดทสถานะการขุดเมื่อมีข้อความเข้ามา
+                        current_mining_status = db.query(models.FBCustomerMiningStatus).filter(
+                            models.FBCustomerMiningStatus.customer_id == existing_customer.id
+                        ).order_by(models.FBCustomerMiningStatus.created_at.desc()).first()
+                        
+                        # ถ้าสถานะปัจจุบันคือ "ขุดแล้ว" ให้เปลี่ยนเป็น "มีการตอบกลับ"
+                        if current_mining_status and current_mining_status.status == "ขุดแล้ว":
+                            new_status = models.FBCustomerMiningStatus(
+                                customer_id=existing_customer.id,
+                                status="มีการตอบกลับ",
+                                note=f"User replied at {datetime.now()}"
+                            )
+                            db.add(new_status)
+                            db.commit()
+                            logger.info(f"💬 Updated mining status to 'มีการตอบกลับ' for: {sender_id}")
+                            
+                            # ส่ง SSE update สำหรับสถานะการขุด (optional)
+                            from app.routes.facebook.sse import customer_type_update_queue
+                            try:
+                                update_data = {
+                                    'page_id': page_id,
+                                    'psid': sender_id,
+                                    'mining_status': 'มีการตอบกลับ',
+                                    'action': 'mining_status_update',
+                                    'timestamp': datetime.now().isoformat()
+                                }
+                                await customer_type_update_queue.put(update_data)
+                                logger.info(f"📡 Sent SSE mining status update for: {sender_id}")
+                            except Exception as e:
+                                logger.error(f"Error sending SSE mining status update: {e}")
                     
                 except Exception as e:
                     logger.error(f"❌ Error processing webhook: {e}")
@@ -256,12 +288,8 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
             'first_interaction_at': first_interaction,
             'last_interaction_at': last_interaction,
             'source_type': 'new',
-            'metadata': {
-                'profile_pic': user_info.get('profile_pic', ''),
-                'gender': user_info.get('gender'),
-                'locale': user_info.get('locale'),
-                'timezone': user_info.get('timezone')
-            }
+            'profile_pic': user_info.get('profile_pic', ''),
+            # ไม่ใส่ customer_type_custom_id และ customer_type_knowledge_id เพราะไม่มีใน model แล้ว
         }
         
         # 6. บันทึกข้อมูลลง database
@@ -269,7 +297,7 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
         
         logger.info(f"✅ Auto sync สำเร็จสำหรับ user: {user_name} ({sender_id})")
         
-        # 🔥 ส่วนสำคัญ: ส่ง SSE Update ไปยัง Frontend
+        # 7. ส่ง SSE Update ไปยัง Frontend (แก้ไขให้ตรงกับ model ใหม่)
         from app.routes.facebook.sse import customer_type_update_queue
         
         try:
@@ -282,7 +310,10 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
                 'last_interaction': last_interaction.isoformat() if last_interaction else None,
                 'source_type': 'new',
                 'action': 'new',  # ระบุว่าเป็น user ใหม่
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                # เพิ่มข้อมูล category ถ้ามี
+                'current_category_id': customer.current_category_id if customer else None,
+                'current_category_name': customer.current_category.type_name if (customer and customer.current_category) else None
             }
             
             # ใส่เข้า queue เพื่อส่งไปยัง SSE
@@ -291,25 +322,6 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
             
         except Exception as e:
             logger.error(f"❌ Error sending SSE update: {e}")
-        
-        # 7. เก็บข้อมูลการแจ้งเตือน (เดิม)
-        if page_id not in new_user_notifications:
-            new_user_notifications[page_id] = []
-            
-        new_user_notifications[page_id].append({
-            'user_name': user_name,
-            'psid': sender_id,
-            'timestamp': datetime.now().isoformat(),
-            'profile_pic': user_info.get('profile_pic', ''),
-            'first_interaction': first_interaction.isoformat() if first_interaction else None
-        })
-        
-        # ลบการแจ้งเตือนเก่า
-        cutoff_time = datetime.now().timestamp() - (24 * 60 * 60)
-        new_user_notifications[page_id] = [
-            notif for notif in new_user_notifications[page_id]
-            if datetime.fromisoformat(notif['timestamp']).timestamp() > cutoff_time
-        ]
         
         return customer
         
