@@ -6,7 +6,7 @@ import DailyMiningLimit from './DailyMiningLimit';
 
 // FontAwesome
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEye, faGripVertical } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faGripVertical, faClock, faUsers } from '@fortawesome/free-solid-svg-icons';
 
 const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, currentMiningCount, dailyMiningLimit, onLimitChange }) => {
     const [messageSets, setMessageSets] = useState([]);
@@ -14,9 +14,12 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
     const [viewingSetName, setViewingSetName] = useState('');
     const [showMessagePopup, setShowMessagePopup] = useState(false);
     const [messages, setMessages] = useState([]);
-
-    // เก็บ id ชุดข้อความที่เลือกพร้อมลำดับ
     const [selectedSets, setSelectedSets] = useState([]);
+
+    // ✅ เพิ่ม State สำหรับความถี่การขุด
+    const [batchSize, setBatchSize] = useState(20);
+    const [delayValue, setDelayValue] = useState(60); // ค่าเวลา
+    const [delayUnit, setDelayUnit] = useState('minutes'); // หน่วยเวลา: 'minutes' หรือ 'hours'
 
     useEffect(() => {
         if (!selectedPage) return;
@@ -48,21 +51,17 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
         }
     };
 
-    // toggle checkbox - อัพเดทให้จัดการลำดับด้วย
     const toggleCheckbox = (setId, setName) => {
         setSelectedSets(prev => {
             const existing = prev.find(item => item.id === setId);
             if (existing) {
-                // ถ้ามีแล้ว ให้ลบออก
                 return prev.filter(item => item.id !== setId);
             } else {
-                // ถ้ายังไม่มี ให้เพิ่มเข้าไปท้ายสุด
                 return [...prev, { id: setId, name: setName, order: prev.length + 1 }];
             }
         });
     };
 
-    // 🚀 ฟังก์ชันสำหรับ Drag and Drop
     const handleDragStart = (e, index) => {
         e.dataTransfer.setData('text/plain', index.toString());
         e.currentTarget.classList.add('drag-start');
@@ -89,7 +88,6 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
             newList.splice(dragIndex, 1);
             newList.splice(dropIndex, 0, draggedItem);
 
-            // อัพเดท order ใหม่
             return newList.map((item, index) => ({
                 ...item,
                 order: index + 1
@@ -97,28 +95,62 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
         });
     };
 
-    // ฟังก์ชันที่เรียกตอนกดยืนยัน
     const handleConfirm = () => {
         if(selectedSets.length === 0){
             alert("กรุณาเลือกชุดข้อความที่ต้องการส่ง");
             return;
         }
-        // ส่งเฉพาะ ID ตามลำดับที่จัดไว้
+
+        // ✅ แปลงเป็นนาทีก่อนส่ง
+        const delayMinutes = delayUnit === 'hours' 
+            ? delayValue * 60 
+            : delayValue;
+
         const orderedIds = selectedSets.map(set => set.id);
-        onConfirm(orderedIds);
+        onConfirm(orderedIds, { batchSize, delayMinutes });
         onClose();
     };
 
-    // Check if exceeds remaining mines
     const exceedsLimit = remainingMines !== undefined && count > remainingMines;
+
+    // ✅ คำนวณจำนวนรอบและเวลาโดยประมาณ (แปลงเป็นนาทีสำหรับคำนวณ)
+    const totalBatches = Math.ceil(count / batchSize);
+    const delayMinutes = delayUnit === 'hours' ? delayValue * 60 : delayValue;
+    const estimatedMinutes = (totalBatches - 1) * delayMinutes;
+
+    // ✅ ฟังก์ชันแสดงเวลาโดยประมาณ
+    const formatEstimatedTime = (minutes) => {
+        if (minutes < 60) {
+            return `${minutes} นาที`;
+        }
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return remainingMinutes > 0 
+            ? `${hours} ชั่วโมง ${remainingMinutes} นาที`
+            : `${hours} ชั่วโมง`;
+    };
+
+    // ========== ✅ FREQUENCY PRESETS (อัพเดทให้มีทั้งนาทีและชั่วโมง) ==========
+    const frequencyPresets = [
+        { name: '🚀 เร็ว', batch: 50, delay: 30, unit: 'minutes' },
+        { name: '⚡ ปกติ', batch: 20, delay: 1, unit: 'hours' },
+        { name: '🐢 ช้า', batch: 10, delay: 2, unit: 'hours' },
+        { name: '🎯 ปลอดภัย', batch: 5, delay: 3, unit: 'hours' }
+    ];
+
+    const applyPreset = (preset) => {
+        setBatchSize(preset.batch);
+        setDelayValue(preset.delay);
+        setDelayUnit(preset.unit);
+    };
 
     return (
         <div className="popup-overlay">
-            <div className="popup-content" style={{ maxWidth: '700px', width: '90vw' }}>
+            <div className="popup-content" style={{ maxWidth: '800px', width: '90vw' }}>
                 <button className="popup-close" onClick={onClose}>✖</button>
-                <h2>ยืนยันการขุด</h2>
+                <h2>⚙️ ยืนยันการขุด</h2>
                 
-                {/* Daily Mining Limit - Compact Version */}
+                {/* Daily Mining Limit */}
                 {currentMiningCount !== undefined && dailyMiningLimit !== undefined && (
                     <DailyMiningLimit
                         currentCount={currentMiningCount}
@@ -140,10 +172,120 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
                         </span>
                     </div>
                 )}
-                
-                <p>คุณต้องการขุด {count} รายการใช่ไหม?</p>
 
-                <div style={{ display: 'flex', gap: '20px' }}>
+                {/* ========== ✅ FREQUENCY CONTROL PANEL ========== */}
+                <div className="frequency-control-panel">
+                    <h3 style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        marginBottom: '15px',
+                        color: '#ffffffff'
+                    }}>
+                        <FontAwesomeIcon icon={faClock} />
+                        ⚙️ ควบคุมความถี่การขุด
+                    </h3>
+                    
+                    {/* ✅ PRESETS SECTION */}
+                    <div className="frequency-presets">
+                        <label style={{ marginBottom: '10px', display: 'block' }}>
+                            ⚡ ค่าตั้งต้น:
+                        </label>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                            {frequencyPresets.map((preset, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => applyPreset(preset)}
+                                    style={{
+                                        padding: '8px 16px',
+                                        border: 'none',
+                                        borderRadius: '20px',
+                                        background: 'rgba(255, 255, 255, 0.2)',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        fontSize: '14px',
+                                        fontWeight: '600',
+                                        transition: 'all 0.3s ease'
+                                    }}
+                                    onMouseOver={(e) => {
+                                        e.target.style.background = 'rgba(255, 255, 255, 0.3)';
+                                        e.target.style.transform = 'scale(1.05)';
+                                    }}
+                                    onMouseOut={(e) => {
+                                        e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+                                        e.target.style.transform = 'scale(1)';
+                                    }}
+                                >
+                                    {preset.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    <div className="frequency-settings">
+                        <div className="frequency-input-group">
+                            <label>
+                                <FontAwesomeIcon icon={faUsers} style={{ marginRight: '8px' }} />
+                                จำนวนคนต่อรอบ:
+                            </label>
+                            <input 
+                                type="number"
+                                value={batchSize}
+                                onChange={(e) => setBatchSize(Math.max(1, parseInt(e.target.value) || 1))}
+                                min="1"
+                                max={count}
+                                style={{
+                                    padding: '8px 12px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    width: '100px'
+                                }}
+                            />
+                            <span className="input-hint">คน</span>
+                        </div>
+
+                        {/* ✅ เวลาหน่วง + เลือกหน่วย */}
+                        <div className="frequency-input-group">
+                            <label>
+                                <FontAwesomeIcon icon={faClock} style={{ marginRight: '8px' }} />
+                                เวลาหน่วงระหว่างรอบ:
+                            </label>
+                            <input 
+                                type="number"
+                                value={delayValue}
+                                onChange={(e) => setDelayValue(Math.max(0, parseInt(e.target.value) || 0))}
+                                min="0"
+                                style={{
+                                    padding: '8px 12px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    width: '100px'
+                                }}
+                            />
+                            <select 
+                                value={delayUnit}
+                                onChange={(e) => setDelayUnit(e.target.value)}
+                                style={{
+                                    padding: '8px 12px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    cursor: 'pointer',
+                                    backgroundColor: 'white',
+                                    marginLeft: '8px'
+                                }}
+                            >
+                                <option value="minutes">นาที</option>
+                                <option value="hours">ชั่วโมง</option>
+                            </select>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
                     {/* คอลัมน์ซ้าย - รายการทั้งหมด */}
                     <div style={{ flex: 1 }}>
                         <h4>เลือกชุดข้อความ:</h4>
@@ -203,7 +345,6 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
                                             onDrop={(e) => handleDrop(e, index)}
                                             className="draggable-item"
                                         >
-                                            {/* Drag Handle */}
                                             <div className="drag-handle">
                                                 <FontAwesomeIcon icon={faGripVertical} />
                                             </div>
