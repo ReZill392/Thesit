@@ -13,9 +13,9 @@ services:
     image: postgres:17
     container_name: db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Ellie0081
-      POSTGRES_DB: Client_Miner
+      POSTGRES_USER: แก้เป็นของมึง
+      POSTGRES_PASSWORD: แก้เป็นของมึง
+      POSTGRES_DB: แก้เป็นของมึง
     ports:
       - "5432:5432"
     networks:
@@ -28,7 +28,7 @@ services:
     volumes:
       - ./:/app
     environment:
-      DATABASE_URL: postgresql://postgres:Ellie0081@db:5432/Client_Miner
+      DATABASE_URL: แก้เป็นของมึง
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: 2
@@ -47,7 +47,7 @@ services:
     volumes:
       - ./:/app
     environment:
-      DATABASE_URL: postgresql://postgres:Ellie0081@db:5432/Client_Miner
+      DATABASE_URL: แก้เป็นของมึง
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: 2
