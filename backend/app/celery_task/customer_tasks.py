@@ -6,6 +6,7 @@ from app.database.database import SessionLocal
 from app.database import crud
 from app.service.auto_sync_service import auto_sync_service
 from celery.exceptions import SoftTimeLimitExceeded
+from app.utils.redis_helper import get_page_token
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,14 @@ def handle_new_customer_task(self, page_id: str, participant_id: str, participan
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             return {"error": f"Page {page_id} not found"}
+        
+        access_token = get_page_token(page_id)
+
+        if not access_token:
+            print(f"❌ Step 1 Failed: No access_token found for page_id={page_id}")
+            return {"status": "error", "message": f"No access_token for page_id={page_id}"}
+        
+        print(f"✅ Step 1 Success: Token found for page_id={page_id}")
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -53,6 +62,14 @@ def handle_existing_customer_task(self, page_id: str, customer_psid: str, msg_ti
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             return {"error": f"Page {page_id} not found"}
+        
+        access_token = get_page_token(page_id)
+
+        if not access_token:
+            print(f"❌ Step 1 Failed: No access_token found for page_id={page_id}")
+            return {"status": "error", "message": f"No access_token for page_id={page_id}"}
+        
+        print(f"✅ Step 1 Success: Token found for page_id={page_id}")
 
         customer = crud.get_customer_by_psid(db, page.ID, customer_psid)
         if not customer:

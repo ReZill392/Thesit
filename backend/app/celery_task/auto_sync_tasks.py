@@ -7,12 +7,13 @@ from app.database import crud, models
 from app.service.facebook_api import fb_get
 from app.service.auto_sync_service import auto_sync_service
 from app.celery_task.customer_tasks import handle_new_customer_task, handle_existing_customer_task
+from app.utils.redis_helper import get_page_token
 import logging
 
 logger = logging.getLogger(__name__)
 
 @celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={'max_retries': 3})
-def sync_all_pages_task(self):
+def sync_all_pages_task(self, page_id: str):
     """
     Task หลัก: ดึงข้อมูลทุกเพจ (เรียก subtask สำหรับแต่ละเพจ)
     """
@@ -20,6 +21,15 @@ def sync_all_pages_task(self):
     try:
         pages = db.query(models.FacebookPage).all()
         logger.info(f"🚀 Celery started syncing {len(pages)} pages")
+
+        print(f"🔍 Step 1: Fetching token from Redis for page_id={page_id}")
+        access_token = get_page_token(page_id)
+
+        if not access_token:
+            print(f"❌ Step 1 Failed: No access_token found for page_id={page_id}")
+            return {"status": "error", "message": f"No access_token for page_id={page_id}"}
+        
+        print(f"✅ Step 1 Success: Token found for page_id={page_id}")
 
         for page in pages:
             token_entry = auto_sync_service.page_tokens.get(page.page_id)
@@ -52,6 +62,16 @@ def sync_page_conversations_task(self, page_id: str, access_token: str):
             "fields": "participants,updated_time,id,messages.limit(10){created_time,from,message,id}",
             "limit": 100
         }
+
+        print(f"🔍 Step 1: Fetching token from Redis for page_id={page_id}")
+        access_token = get_page_token(page_id)
+
+        if not access_token:
+            print(f"❌ Step 1 Failed: No access_token found for page_id={page_id}")
+            return {"status": "error", "message": f"No access_token for page_id={page_id}"}
+        
+        print(f"✅ Step 1 Success: Token found for page_id={page_id}")
+
 
         result = fb_get(endpoint, params, access_token)
         if "error" in result:
@@ -89,6 +109,16 @@ def process_participant_task(self, participant_data, page_id, convo_id, access_t
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             return {"error": f"page_id {page_id} not found"}
+        
+        print(f"🔍 Step 1: Fetching token from Redis for page_id={page_id}")
+        access_token = get_page_token(page_id)
+
+        if not access_token:
+            print(f"❌ Step 1 Failed: No access_token found for page_id={page_id}")
+            return {"status": "error", "message": f"No access_token for page_id={page_id}"}
+        
+        print(f"✅ Step 1 Success: Token found for page_id={page_id}")
+
 
         existing = crud.get_customer_by_psid(db, page.ID, participant_id)
         if existing:
@@ -116,6 +146,15 @@ def process_conversation_task(self, convo_data, page_id, access_token):
     ประมวลผลแต่ละ conversation (เรียก task ลูกค้าแต่ละคน)
     """
     try:
+        print(f"🔍 Step 1: Fetching token from Redis for page_id={page_id}")
+        access_token = get_page_token(page_id)
+
+        if not access_token:
+            print(f"❌ Step 1 Failed: No access_token found for page_id={page_id}")
+            return {"status": "error", "message": f"No access_token for page_id={page_id}"}
+        
+        print(f"✅ Step 1 Success: Token found for page_id={page_id}")
+
         convo_id = convo_data.get("id")
         participants = convo_data.get("participants", {}).get("data", [])
 

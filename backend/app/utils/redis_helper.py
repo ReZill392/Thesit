@@ -1,8 +1,7 @@
 import os
 import redis
 
-# อ่าน env vars เพื่อเชื่อม Redis
-REDIS_HOST = os.getenv("REDIS_HOST", "redis")  # default เป็นชื่อ container
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_DB = int(os.getenv("REDIS_DB", 2))
 

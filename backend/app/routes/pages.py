@@ -34,7 +34,7 @@ def create_page(page: schemas.FacebookPageCreate, db: Session = Depends(get_db))
 def read_pages(db: Session = Depends(get_db)):
     """Get all Facebook pages with optimized format"""
     pages = crud.get_pages(db)
-    return [format_page_response(page) for page in pages]
+    return {"pages": [format_page_response(page) for page in pages]}
 
 @router.get("/pages/{page_id}", response_model=schemas.FacebookPageOut)
 def read_page(page_id: str, db: Session = Depends(get_db)):
